@@ -1,0 +1,29 @@
+SAFE MIGRATION / EXACT LIST BASED ON YOUR SCREENSHOT
+
+DO NOT DELETE YOUR REPOSITORY OR SECRET MANAGERS. SAVE GITHUB ZIP FIRST AND VERIFY IT.
+PREFERRED: Create a test branch from main, upload all files from this package preserving folders; confirm running then merge, rather than delete first.
+
+REPLACE (same filenames, within TEST branch):
+ README.md
+ app.py
+ market_engine.py
+ hourly_top10.py
+ requirements.txt
+ README_SETUP.txt (restore from this package)
+ .github/workflows/hourly_top10.yml (ONLY if present, inspect existing first)
+
+KEEP FOR NOW — NOT PROVIDED AS REPLACEMENTS / MAY HAVE WORKING FEATURES:
+ .devcontainer/ (optional development environment)
+ alpaca_connection_test.py (don't run against live account without checking)
+ hourly_requirements.txt (old script's dependencies; review later)
+ .github/ other workflows (do not delete indiscriminately)
+ pages/ existing pages if any (check imports; old pages might not be compatible)
+ other Python, config, SQL files if present (review rather than blanket-delete)
+
+ADD:
+ config.py, risk.py, storage.py, scanners.py, tests/test_risk.py
+
+NO FILES NEED TO BE DELETED FIRST TO UPLOAD THIS ZIP'S CONTENTS.
+GitHub mobile app may not extract ZIP into repo; use browser GitHub UI or upload extracted files preserving paths. ZIP contents must NOT be committed as one ZIP expecting Streamlit to run it.
+
+IMPORTANT GAPS: This package is not the requested complete autonomous Ultimate project. It is a testable foundation to protect against deploying imaginary/incomplete functionality. Do not switch main until verified. Actions runner writes local SQLite only and will not share it with Streamlit.
