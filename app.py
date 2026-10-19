@@ -27,7 +27,7 @@ def show_chart(symbol,mode,plan=None):
     st.plotly_chart(
     fig,
     use_container_width=True,
-    key=f"chart_{symbol}_{group}"
+    key=f"chart_{symbol}_{mode}_{id(fig)}"
 )
     if z:
         c1,c2,c3=st.columns(3)
