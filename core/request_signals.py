@@ -72,7 +72,7 @@ def discover_contracts(tickers, budget=300, now=None, ticker_factory=None, analy
     results={group:[] for group in CATEGORIES}; notices=[]
     budget=float(budget)
     if not 30<=budget<=3000:raise ValueError('Budget must be between $30 and $3000')
-    unique=list(dict.fromkeys(str(t).upper().strip() for t in tickers if str(t).strip()))[:12]
+    unique=list(dict.fromkeys(str(t).upper().strip() for t in tickers if str(t).strip()))[:60]
     for symbol in unique:
         try:
             analysis=analyzer(symbol)
