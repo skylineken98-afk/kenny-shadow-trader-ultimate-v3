@@ -24,7 +24,11 @@ def show_chart(symbol,mode,plan=None):
     if fig is None:
         st.info('No usable candles from the current data provider for this ticker/timeframe.')
         return
-    st.plotly_chart(fig,use_container_width=True)
+    st.plotly_chart(
+    fig,
+    use_container_width=True,
+    key=f"chart_{sym}_{group}"
+)
     if z:
         c1,c2,c3=st.columns(3)
         c1.metric('Underlying last',f"${z['price']:,.2f}")
