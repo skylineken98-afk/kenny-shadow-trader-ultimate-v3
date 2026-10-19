@@ -44,12 +44,43 @@ def explore(kind,preset):
 for idx,kind,default in [(1,'0DTE','SPY'),(2,'Swings','IWM'),(3,'LEAPS','QQQ'),(4,'Stocks','AAPL'),(5,'Crypto','BTC-USD'),(6,'Forex','EURUSD=X'),(7,'Futures','NQ=F')]:
     with tabs[idx]: explore(kind,default)
 with tabs[8]:
-    st.subheader('Request a technical scan')
-    ticker=st.text_input('Any Yahoo Finance compatible symbol','SPY',key='request_symbol')
-    budget=st.number_input('Illustrative budget ($)',min_value=30,max_value=3000,value=100,step=10)
-    if st.button('Scan selected ticker'):
-        s=confluence(ticker.upper().strip());st.json(s)
-        st.caption(f'Budget ${budget:,} does not imply a tradable contract is available.')
+    from core.request_signals import discover_contracts, CATEGORIES
+    st.subheader('🎯 Request a Signal — Top 3 per category')
+    st.caption('Real vendor option-chain contracts · Ranked research candidates · Not trade recommendations or live executable quotes')
+    c1,c2=st.columns([3,1])
+    with c1:
+        universe=st.text_input('Underlyings to search (comma-separated)', 'SPY,QQQ,IWM,TSLA,NVDA,AAPL,MSFT', key='request_symbols')
+    with c2:
+        budget=st.number_input('Max cost per 1 contract ($)',min_value=30,max_value=3000,value=300,step=10,key='request_budget')
+    st.caption('Requires aligned bullish or bearish 4H → 1H → 5M research setup, nonzero bid, sufficient liquidity and available expirations. Results can be fewer than three.')
+    if st.button('🔎 Request Top 3 for 0DTE, Swings & LEAPS', type='primary',key='request_options'):
+        with st.spinner('Checking option chains and multi-timeframe trend alignment…'):
+            st.session_state['requested_options']=discover_contracts(universe.split(','),budget)
+    if 'requested_options' in st.session_state:
+        found,notes=st.session_state['requested_options']
+        for group in CATEGORIES:
+            st.markdown(f'### {group} · {len(found[group])}/3 verified candidates')
+            if not found[group]:st.info('No contracts met the expiration, data freshness, liquidity, budget, and trend requirements. No placeholders generated.')
+            columns=st.columns(3)
+            for index,record in enumerate(found[group]):
+                with columns[index]:
+                    right=record['right'];direction='🟢 CALL' if right=='CALL' else '🔴 PUT'
+                    quote=record['last'];cost=record['cost']
+                    st.markdown(f"**{index+1}. {record['contract']}**")
+                    st.caption(f"{record['ticker']} · {record['expiration']} · {record['strike']:g} · {direction}")
+                    st.metric('Last trade premium',f'${quote:.2f}' if quote is not None else 'Unavailable',
+                        f"{record['percent_change']:+.2f}%" if record['percent_change'] is not None else None)
+                    st.markdown(f"**Bid:** ${record['bid']:.2f} &nbsp;&nbsp; **Ask:** ${record['ask']:.2f}")
+                    st.caption(f"Indicative 1-contract ask cost: ${cost:,.2f} · Spread {record['spread_pct']:.1f}%")
+                    st.caption(f"Volume {record['volume']:,} · Open interest {record['open_interest']:,} · Rank {record['rank_score']:.1f}/100 (liquidity/fit, NOT win probability)")
+                    with st.expander('Quote & research details'):
+                        st.write('Last option trade:',record['last_trade_at'])
+                        st.write('Quote caveat:',record['quote_warning'])
+                        st.write('No verified option-premium entry, stop, or target. Do not substitute underlying price levels.')
+                        st.write('This contract was identified by its vendor-reported symbol and chain; verify live quotes with your broker.')
+        with st.expander(f'Provider and screening notices ({len(notes)})'):
+            for notice in notes:st.caption(notice)
+        st.warning('Quote fields may be delayed. Last-trade timestamps do not establish bid/ask freshness. 0DTE can be unavailable outside market hours or when no qualifying expiry exists. No orders are submitted.')
 with tabs[9]:
     st.subheader('Rule-based market sentiment proxy')
     st.caption('This is not a licensed fear/greed, fund flow or options positioning feed.')
