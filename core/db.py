@@ -10,13 +10,28 @@ def client():
     from supabase import create_client
     return create_client(url,key)
 
+
 def insert(table, row):
-    c=client()
-    if c is None: return {'ok':False,'error':'Supabase credentials are missing'}
     try:
-        result=c.table(table).insert(row).execute()
-        return {'ok':True,'data':result.data}
-    except Exception as exc: return {'ok':False,'error':str(exc)}
+        c = client()
+        if c is None:
+            return {'ok': False, 'error': 'Supabase configuration missing'}
+
+        result = c.table(table).insert(row).execute()
+        return {'ok': True, 'data': result.data}
+
+    except Exception as exc:
+        import logging
+        logging.error(
+            "Supabase INSERT failed for table %s: %s",
+            table,
+            type(exc).__name__
+        )
+        return {
+            'ok': False,
+            'error': str(exc)
+        }
+
 
 def fetch(table,limit=100,filters=None):
     c=client()
