@@ -1,0 +1,9 @@
+streamlit>=1.39,<2
+pandas>=2.2,<3
+numpy>=1.26,<3
+requests>=2.32,<3
+yfinance>=0.2.54,<2
+plotly>=5.24,<7
+supabase>=2.9,<3
+python-dotenv>=1.0,<2
+pytest>=8,<10
