@@ -29,3 +29,16 @@ The ZIP contains original source preserved and newly added separated research/pa
 | Performance claims | None supported | Do not imply 98% win rate or 10% guaranteed daily gains |
 
 Never interpret a SETUP, signal, or CANDIDATE_ONLY row as a fill or realized return.
+
+## Regulatory data connectors added (unverified network activation)
+- **SEC** (`core/sec_intelligence.py`): EDGAR company ticker-to-CIK lookup, company XBRL facts, recent filings. Requires `SEC_USER_AGENT` in server secrets with application identity and contact email, no key. Read-only; data is delayed.
+- **FINRA** (`core/finra_intelligence.py`): OAuth credential adapter and read-only query client for configured regulatory datasets. Requires `FINRA_CLIENT_ID`, `FINRA_CLIENT_SECRET`, and commercial permission for public redistribution. Dataset entitlement/version validation pending real connected tests.
+- Neither module implies real-time institutional buying/selling, nor is either yet wired to ranking or Supabase scheduled ingestion. Do not claim active/live connection.
+- User reports FRED and Alpaca already connected externally; their secrets were not changed or verified in this package.
+
+## Paper automation integration update
+- `core/paper_automation.py`: opt-in, simulated-only candidate to position record, quote freshness checks, account kill-switch check, unique-key deduplication, audit event for stop.
+- `workers/paper_execution_worker.py`: orchestrator that does **not** guess premiums; requires verified contract quote provider supplied by the next integration.
+- This is **not yet end-to-end unattended broker trading**: still requires quote ingestion, eligibility gating, atomic account reservation, robust exit worker, fill verification, recovery and dashboard authentication.
+- Database migration `sql/v3_execution_research.sql` is still manual. Do not enable worker in multi-replica Railway deployment.
+- No live-money broker execution functionality is enabled.

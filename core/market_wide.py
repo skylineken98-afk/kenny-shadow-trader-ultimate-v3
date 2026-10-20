@@ -14,7 +14,7 @@ LISTINGS = (
  ('https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt','ACT Symbol'),
 )
 
-def listed_symbols(limit=3000):
+def listed_symbols(limit=None):
     found=set(FALLBACK); notices=[]
     for url,col in LISTINGS:
         try:
@@ -27,15 +27,16 @@ def listed_symbols(limit=3000):
     # deterministic rotating sample for fairer discovery; not claiming exhaustive coverage
     priority=list(dict.fromkeys(FALLBACK))
     others=sorted(found.difference(priority))
-    return (priority+others)[:limit],notices
+    universe=priority+others
+    return (universe[:limit] if limit is not None else universe),notices
 
-def shortlist(tickers, sample_size=160, shortlist_size=18, offset=0, downloader=None):
+def shortlist(tickers, sample_size=160, shortlist_size=18, offset=0, downloader=None, min_price=0.50, min_dollar_volume=250_000):
     """Batch daily-bar liquidity/movement screen before costly multi-frame/options queries."""
     import yfinance as yf
     downloader=downloader or yf.download
     unique=list(dict.fromkeys(tickers))
     if not unique:return [],['Universe is empty']
-    size=min(max(1,int(sample_size)),400)
+    size=min(max(1,int(sample_size)),1000)
     pool=(unique[offset%len(unique):]+unique[:offset%len(unique)])[:size]
     scored=[]; notices=[]
     for start in range(0,len(pool),40):
@@ -48,10 +49,14 @@ def shortlist(tickers, sample_size=160, shortlist_size=18, offset=0, downloader=
                     d=d.dropna(subset=['Close','Volume'])
                     if len(d)<3:continue
                     p=float(d['Close'].iloc[-1]);v=float(d['Volume'].tail(5).mean())
-                    if p<2 or p*v<2_000_000:continue
+                    if p<min_price or p*v<min_dollar_volume:continue
                     ret=abs(float(d['Close'].iloc[-1]/d['Close'].iloc[-3]-1))
-                    scored.append((sym,p*v*(1+min(ret,0.3)*12)))
+                    # Rank movement and tradability without making mega-caps dominate every shortlist.
+                    import math
+                    scored.append((sym, min(math.log10(max(p*v,1)),9)*3 + min(ret,0.30)*150))
                 except (KeyError,TypeError,ValueError,ZeroDivisionError):continue
         except Exception as exc:notices.append(f'Daily screening batch unavailable: {type(exc).__name__}')
     scored.sort(key=lambda x:x[1],reverse=True)
+    # Reserve space for genuinely lower-priced names while screening for activity.
+    # Caller can increase shortlist_size; this is not a guarantee of listed options.
     return [s for s,_ in scored[:shortlist_size]],notices

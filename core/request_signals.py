@@ -2,6 +2,7 @@
 from datetime import datetime, date, timezone, timedelta
 from zoneinfo import ZoneInfo
 import math
+from core.flow_intelligence import alignment_bonus
 
 CATEGORIES = ('0DTE', 'Swings', 'LEAPS')
 
@@ -28,7 +29,7 @@ def quote_timestamp(value):
         return x.tz_localize('UTC').to_pydatetime() if x.tzinfo is None else x.to_pydatetime().astimezone(timezone.utc)
     except (ValueError,TypeError,OverflowError):return None
 
-def rank_row(raw, ticker, expiration, right, underlying, direction, budget, now, max_age_hours=48):
+def rank_row(raw, ticker, expiration, right, underlying, direction, budget, now, max_age_hours=48, flow=None):
     if direction not in ('BULLISH','BEARISH'):return None
     if right != ('call' if direction=='BULLISH' else 'put'):return None
     bid=to_float(raw.get('bid')); ask=to_float(raw.get('ask'))
@@ -53,11 +54,11 @@ def rank_row(raw, ticker, expiration, right, underlying, direction, budget, now,
         'high':to_float(raw.get('dayHigh')),'low':to_float(raw.get('dayLow')),
         'open':to_float(raw.get('open')),'previous_close':None,
         'volume':int(vol),'open_interest':int(oi),'spread_pct':round(spread*100,1),
-        'cost':round(ask*100,2),'rank_score':score,'quote_warning':'Indicative bid/ask; vendor does not supply a verified quote timestamp',
+        'cost':round(ask*100,2),'price_band':('budget' if ask*100<=50 else 'standard'),'rank_score':round(score + alignment_bonus(flow, direction), 2), 'base_contract_score':score, 'flow':flow, 'quote_warning':'Indicative bid/ask; vendor does not supply a verified quote timestamp',
         'last_trade_at':ts.isoformat(),'data_checked_at':now.isoformat(),'direction':direction,
         'entry_note':'No executable entry/stop/target without an option-premium risk model'}
 
-def discover_contracts(tickers, budget=300, now=None, ticker_factory=None, analyzer=None):
+def discover_contracts(tickers, budget=300, now=None, ticker_factory=None, analyzer=None, per_category=3, flow_provider=None):
     """Find at most three unique option contracts per expiration category across supplied underlyings.
     Requires real yfinance chains; never produces mock market values in production.
     """
@@ -69,10 +70,15 @@ def discover_contracts(tickers, budget=300, now=None, ticker_factory=None, analy
     if analyzer is None:
         from core.market import confluence
         analyzer=confluence
+    if flow_provider is None:
+        from core.market import history
+        from core.flow_intelligence import measure_flow
+        def flow_provider(symbol):
+            return measure_flow(history(symbol, period='2mo', interval='1d'))
     results={group:[] for group in CATEGORIES}; notices=[]
     budget=float(budget)
-    if not 30<=budget<=3000:raise ValueError('Budget must be between $30 and $3000')
-    unique=list(dict.fromkeys(str(t).upper().strip() for t in tickers if str(t).strip()))[:60]
+    if not 5<=budget<=3000:raise ValueError('Budget must be between $5 and $3000')
+    unique=list(dict.fromkeys(str(t).upper().strip() for t in tickers if str(t).strip()))
     for symbol in unique:
         try:
             analysis=analyzer(symbol)
@@ -80,6 +86,11 @@ def discover_contracts(tickers, budget=300, now=None, ticker_factory=None, analy
                 notices.append(f'{symbol}: No aligned 4H/1H/5M setup; skipped');continue
             underlying=to_float((analysis.get('frames',{}).get('5m') or {}).get('price'))
             if not underlying or underlying<=0:continue
+            # Missing flow data does not fabricate money flows or block otherwise valid ideas.
+            try: flow = flow_provider(symbol)
+            except Exception:
+                flow = None
+                notices.append(f'{symbol}: OHLCV flow data unavailable')
             ticker=ticker_factory(symbol)
             groups={g:[] for g in CATEGORIES}
             for exp in ticker.options or []:
@@ -93,7 +104,7 @@ def discover_contracts(tickers, budget=300, now=None, ticker_factory=None, analy
                         frame=chain.calls if right=='call' else chain.puts
                         for row in frame.to_dict('records'):
                             record=rank_row(row,symbol,exp,right,underlying,analysis['side'],budget,now,
-                                            max_age_hours=(24 if group=='0DTE' else 72))
+                                            max_age_hours=(24 if group=='0DTE' else 72), flow=flow)
                             if record:
                                 record['category']=group
                                 record['underlying_price']=underlying
@@ -106,6 +117,6 @@ def discover_contracts(tickers, budget=300, now=None, ticker_factory=None, analy
         for r in ranked:
             if r['contract'] in seen:continue
             seen.add(r['contract']);selected.append(r)
-            if len(selected)==3:break
+            if len(selected)==per_category:break
         results[group]=selected
     return results, notices

@@ -24,7 +24,11 @@ def show_chart(symbol,mode,plan=None):
     if fig is None:
         st.info('No usable candles from the current data provider for this ticker/timeframe.')
         return
-    st.plotly_chart(fig,use_container_width=True)
+    st.plotly_chart(
+    fig,
+    use_container_width=True,
+    key=f"chart_{symbol}_{mode}_{id(fig)}"
+)
     if z:
         c1,c2,c3=st.columns(3)
         c1.metric('Underlying last',f"${z['price']:,.2f}")
@@ -71,23 +75,23 @@ for idx,kind,default in [(1,'0DTE','SPY'),(2,'Swings','IWM'),(3,'LEAPS','QQQ'),(
     with tabs[idx]: explore(kind,default)
 with tabs[8]:
     from core.request_signals import discover_contracts,CATEGORIES
-    st.subheader('🎯 Request a Signal · 3 best contracts per strategy')
+    st.subheader('🎯 Full-universe rotating discovery · best contracts')
     st.caption('Market-wide DISCOVERY ➜ daily liquidity prescreen ➜ 4H/1H/5M alignment ➜ actual option chain ➜ ranked Top 3. No single required ticker.')
     c1,c2,c3=st.columns(3)
-    with c1:budget=st.number_input('Maximum 1-contract cost ($)',30,3000,300,10,key='universe_budget')
-    with c2:sample=st.selectbox('Daily prescreen breadth',[60,120,200,400],index=1,key='scan_breadth')
-    with c3:rotation=st.number_input('Universe rotation offset',min_value=0,value=0,step=120,key='scan_offset')
-    st.caption('An exchange-listing-based rotating sample is screened; NOT a complete, live scan of every stock. This may take several minutes and free feeds can throttle requests.')
+    with c1:budget=st.number_input('Maximum 1-contract cost ($)',5,3000,100,5,key='universe_budget')
+    with c2:sample=st.selectbox('Listings screened per pass',[120,400,800,1000],index=1,key='scan_breadth')
+    with c3:rotation=st.number_input('Universe rotation offset',min_value=0,value=0,step=400,key='scan_offset')
+    st.caption('Includes lower-priced stocks down to $0.50; they must still have listed options and pass liquidity and chart filters. One pass does NOT cover the full universe; rotate through passes to widen discovery. Delayed public data can throttle.')
     if st.button('🔎 Scan market for Top 3 0DTE + Swings + LEAPS',type='primary',key='request_options'):
         with st.spinner('Discovering listings and ranking liquid underlyings...'):
             all_tickers,listing_notes=listed_symbols()
-            screened,screen_notes=shortlist(all_tickers,sample_size=sample,shortlist_size=18,offset=rotation)
+            screened,screen_notes=shortlist(all_tickers,sample_size=sample,shortlist_size=40,offset=rotation,min_price=0.50,min_dollar_volume=250_000)
         with st.spinner(f'Checking options on {len(screened)} liquid candidates...'):
             found,chain_notes=discover_contracts(screened,budget)
         st.session_state['requested_options']=(found,listing_notes+screen_notes+chain_notes,screened,len(all_tickers))
     if 'requested_options' in st.session_state:
         found,notes,screened,listed_count=st.session_state['requested_options']
-        st.caption(f'Listing universe: {listed_count:,} symbols · daily candidates evaluated: {sample} maximum · deep multi-timeframe/options checks: {len(screened)}. Rank score measures liquidity/fit, not profit probability.')
+        st.caption(f'Listing universe: {listed_count:,} symbols · this pass up to {sample} symbols starting at {rotation:,} · deeper checks: {len(screened)}. Scores are liquidity/fit, NOT predicted profitability. For full coverage, run consecutive passes across the entire universe.')
         for group in CATEGORIES:
             st.markdown(f'### {group} — {len(found[group])} / 3 qualifying contracts')
             if not found[group]:st.warning('No verifiable contracts met every rule. Increase scan breadth or rotate the universe; no fabricated substitutes.')
@@ -136,6 +140,24 @@ with tabs[12]:
     st.write('Paper risk defaults: 1% equity risk/trade, 5% daily drawdown guard, 10% per-symbol allocation, 25% gross exposure cap.')
     st.write('These are safety checks for illustrative paper entries, not a complete automated risk engine.')
     st.write('News and market workers run separately from the dashboard on Railway.')
+    st.divider()
+    st.subheader('V3 paper-agent emergency stop (research only)')
+    st.caption('Stops new simulated entries for an agent. Does not cancel broker orders or close positions. Safe state is killed=true.')
+    if not password:
+        st.warning('Set APP_PASSWORD before enabling dashboard control of agent states.')
+    else:
+        from core.agents import PROFILES as V3_PROFILES
+        from core.paper_automation import request_emergency_stop
+        selected_paper_agent=st.selectbox('Research agent', list(V3_PROFILES), key='v3_stop_agent')
+        st.dataframe(pd.DataFrame(fetch('v3_paper_accounts',20)),use_container_width=True)
+        confirm_stop=st.checkbox('Confirm STOP for this research agent',key='confirm_v3_stop')
+        if st.button('EMERGENCY STOP — paper entries only',disabled=not confirm_stop,key='v3_paper_stop_button'):
+            try:
+                request_emergency_stop(selected_paper_agent)
+                st.success('Paper stop confirmed in Supabase.')
+            except Exception:
+                st.error('Stop confirmation failed. Keep the paper worker disabled until database connectivity is restored.')
+
 
 # Independent upgrade dashboard panels. These never trigger broker orders.
 with st.expander('Research agent evaluations (read-only)', expanded=False):
