@@ -223,13 +223,14 @@ for underlying in SYMBOLS:
             if result is None:
                 continue
 
-            result["score"] = contract_score(result)
+            result["raw_score"] = contract_score(result)
+            result["score"] = max(0.0, min(100.0, result["raw_score"]))
 
             candidates.append(result)
             all_results.append(result)
 
         candidates.sort(
-            key=lambda x: x["score"],
+            key=lambda x: x["raw_score"],
             reverse=True
         )
 

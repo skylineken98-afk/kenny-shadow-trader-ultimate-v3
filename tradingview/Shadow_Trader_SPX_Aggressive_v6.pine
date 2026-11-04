@@ -1,0 +1,87 @@
+//@version=6
+indicator("Shadow Trader SPX Aggressive — 1H/15M/1M", overlay=true, max_boxes_count=60, max_labels_count=100)
+// Use on a 1-minute chart. Signals are research only, NOT broker orders.
+// Only CLOSED 1H/15M values are used. The current 1m bar must close for entry signals.
+// The volume pressure proxy is NOT true bid/ask delta, options flow, or a heatmap feed.
+
+minRR = input.float(1.5, "Minimum reward:risk", minval=1.0, step=0.25)
+zoneAtr = input.float(0.60, "15m zone radius in ATR", minval=0.10, step=0.05)
+proximityAtr = input.float(0.40, "Early proximity distance in 1m ATR", minval=0.05, step=0.05)
+useSweep = input.bool(false, "Require prior liquidity sweep")
+useVolume = input.bool(false, "Require volume expansion (not recommended on cash SPX)")
+showPressure = input.bool(true, "Show candle-pressure proxy background")
+showBoxes = input.bool(true, "Draw reward/risk boxes on confirmed entries")
+
+// Closed higher-timeframe series: [1] INSIDE the requested frame; lookahead_off.
+h1Close = request.security(syminfo.tickerid, "60", close[1], lookahead=barmerge.lookahead_off)
+h1Fast = request.security(syminfo.tickerid, "60", ta.ema(close,20)[1], lookahead=barmerge.lookahead_off)
+h1Slow = request.security(syminfo.tickerid, "60", ta.ema(close,50)[1], lookahead=barmerge.lookahead_off)
+m15High = request.security(syminfo.tickerid, "15", high[1], lookahead=barmerge.lookahead_off)
+m15Low = request.security(syminfo.tickerid, "15", low[1], lookahead=barmerge.lookahead_off)
+m15Atr = request.security(syminfo.tickerid, "15", ta.atr(14)[1], lookahead=barmerge.lookahead_off)
+m15Fast = request.security(syminfo.tickerid, "15", ta.ema(close,20)[1], lookahead=barmerge.lookahead_off)
+m15Slow = request.security(syminfo.tickerid, "15", ta.ema(close,50)[1], lookahead=barmerge.lookahead_off)
+
+bullTrend = h1Close > h1Fast and h1Fast > h1Slow and m15Fast > m15Slow
+bearTrend = h1Close < h1Fast and h1Fast < h1Slow and m15Fast < m15Slow
+atr1 = ta.atr(14)
+// Approximate 15m demand/supply from most recent completed candle extremes.
+demand = m15Low
+supply = m15High
+nearDemand = bullTrend and low <= demand + m15Atr * zoneAtr + atr1 * proximityAtr and high >= demand - m15Atr * zoneAtr
+nearSupply = bearTrend and high >= supply - m15Atr * zoneAtr - atr1 * proximityAtr and low <= supply + m15Atr * zoneAtr
+
+// 1m structure-break trigger follows proximity. All entries require barstate.isconfirmed.
+priorHigh = ta.highest(high[1], 5)
+priorLow = ta.lowest(low[1], 5)
+sweepLow = ta.lowest(low, 8) < ta.lowest(low[8], 8)
+sweepHigh = ta.highest(high, 8) > ta.highest(high[8], 8)
+barVolumeOK = not useVolume or (volume > ta.sma(volume[1],20) * 1.2)
+var bool armedLong = false
+var bool armedShort = false
+if barstate.isconfirmed
+    if not bullTrend
+        armedLong := false
+    if not bearTrend
+        armedShort := false
+    if nearDemand
+        armedLong := true
+    if nearSupply
+        armedShort := true
+
+sessionVWAP = ta.vwap(hlc3)
+// VWAP is a reference and optional objective, never the only target.
+longStop = math.min(ta.lowest(low,8), demand - 0.10 * m15Atr)
+shortStop = math.max(ta.highest(high,8), supply + 0.10 * m15Atr)
+longRisk = close - longStop
+shortRisk = shortStop - close
+longTarget = close + longRisk * minRR
+shortTarget = close - shortRisk * minRR
+validLong = longRisk > syminfo.mintick and longRisk <= atr1 * 5
+validShort = shortRisk > syminfo.mintick and shortRisk <= atr1 * 5
+longEntry = barstate.isconfirmed and armedLong and bullTrend and close > priorHigh and validLong and barVolumeOK and (not useSweep or sweepLow)
+shortEntry = barstate.isconfirmed and armedShort and bearTrend and close < priorLow and validShort and barVolumeOK and (not useSweep or sweepHigh)
+if longEntry
+    armedLong := false
+    if showBoxes
+        box.new(bar_index, longTarget, bar_index+10, close, bgcolor=color.new(color.lime,85), border_color=color.new(color.lime,45))
+        box.new(bar_index, close, bar_index+10, longStop, bgcolor=color.new(color.red,85), border_color=color.new(color.red,45))
+if shortEntry
+    armedShort := false
+    if showBoxes
+        box.new(bar_index, close, bar_index+10, shortTarget, bgcolor=color.new(color.lime,85), border_color=color.new(color.lime,45))
+        box.new(bar_index, shortStop, bar_index+10, close, bgcolor=color.new(color.red,85), border_color=color.new(color.red,45))
+
+// Close-position-within-candle pressure * volume: OHLCV proxy, NOT exchange delta.
+pressure = high > low and volume > 0 ? (2*close-high-low)/(high-low) : 0.0
+pressureEMA = ta.ema(pressure,5)
+bgcolor(showPressure and volume > 0 ? (pressureEMA > .20 ? color.new(color.green,94) : pressureEMA < -.20 ? color.new(color.red,94) : na) : na)
+plot(demand,"15m demand proxy",color=color.new(color.teal,15),style=plot.style_stepline)
+plot(supply,"15m supply proxy",color=color.new(color.orange,15),style=plot.style_stepline)
+plot(sessionVWAP,"Session VWAP",color=color.yellow,linewidth=2)
+plotshape(longEntry,title="Confirmed bullish",style=shape.labelup,text="LONG",location=location.belowbar,color=color.lime,textcolor=color.black,size=size.tiny)
+plotshape(shortEntry,title="Confirmed bearish",style=shape.labeldown,text="SHORT",location=location.abovebar,color=color.red,textcolor=color.white,size=size.tiny)
+alertcondition(nearDemand and not nearDemand[1],"Early bullish zone proximity","Shadow Trader: bullish 15m demand zone proximity on {{ticker}} (early alert, NOT confirmed entry).")
+alertcondition(nearSupply and not nearSupply[1],"Early bearish zone proximity","Shadow Trader: bearish 15m supply zone proximity on {{ticker}} (early alert, NOT confirmed entry).")
+alertcondition(longEntry,"Confirmed bullish 1m entry","Shadow Trader: confirmed bullish 1m structure break on {{ticker}}.")
+alertcondition(shortEntry,"Confirmed bearish 1m entry","Shadow Trader: confirmed bearish 1m structure break on {{ticker}}.")

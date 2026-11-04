@@ -3,8 +3,8 @@ from core.db import insert,fetch,now
 from core.risk import sizing,permitted
 
 def open_paper_trade(symbol,asset_class,side,entry,stop,target,equity=10000,cash=10000,day_start_equity=10000,gross_exposure=0,kill=False,agent='conservative'):
-    if asset_class not in ('stock','crypto','forex','future'):
-        return {'ok':False,'error':'Only simplified spot-equivalent paper positions are supported. Options/futures contract mechanics are not implemented.'}
+    if asset_class not in ('stock','crypto'):
+        return {'ok':False,'error':'Only stock and spot-crypto simulations are supported. Option contract mechanics are not implemented.'}
     if side not in ('BUY','SELL'):return {'ok':False,'error':'invalid side'}
     if entry<=0 or stop is None or target is None:return {'ok':False,'error':'invalid prices'}
     qty=sizing(cash,equity,entry,stop)

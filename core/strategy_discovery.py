@@ -23,7 +23,7 @@ THEMES = {
  'flow':['Unusual options volume','Dark-pool prints','Open interest changes','Dealer positioning','Institutional filings'],
  'events':['Post earnings drift','News catalyst','Analyst revision','Sympathy trading','Sector news rotation'],
  'quant':['Cointegration','Cross sectional momentum','Factor rotation','Statistical arbitrage','Calendar effect'],
- 'crypto_forex':['Crypto funding divergence','Crypto liquidation sweep','Crypto basis','FX session breakout','FX carry']
+ 'crypto':['Crypto funding divergence','Crypto liquidation sweep','Crypto basis']
 }
 CATALOG=tuple({'name':n,'category':category,'implementation':'research_spec_only'} for category, names in THEMES.items() for n in names)
 

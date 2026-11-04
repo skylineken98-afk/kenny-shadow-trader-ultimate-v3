@@ -9,4 +9,6 @@ def get(name, default=""):
     except Exception: return default
 
 def symbols():
-    return [s.strip().upper() for s in get('SCAN_SYMBOLS','SPY,QQQ,IWM,AAPL,MSFT,NVDA,TSLA,BTC-USD,ETH-USD').split(',') if s.strip()]
+    from core.asset_scope import in_scope_symbol
+    configured = (s.strip().upper() for s in get('SCAN_SYMBOLS','SPY,QQQ,IWM,AAPL,MSFT,NVDA,TSLA,BTC-USD,ETH-USD').split(','))
+    return list(dict.fromkeys(s for s in configured if in_scope_symbol(s)))
