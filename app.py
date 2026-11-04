@@ -14,11 +14,11 @@ password=get('APP_PASSWORD')
 if password:
     entered=st.text_input('Access password',type='password')
     if entered!=password:st.stop()
-st.title('⚡ Kenny Shadow Trader Ultimate V3')
+st.title('⚡ Kenny Shadow Trader Ultimate V3 · Options / Stocks / Crypto')
 st.caption('BETA • Rules-based market scan • Paper simulations only • Live orders permanently disabled in this build')
 if not password:st.warning('APP_PASSWORD is not configured. Set it before exposing the dashboard publicly; service-role credentials must remain server-side.')
 if client() is None:st.warning('Supabase is not configured. Live market exploration works; persistence, news history and paper ledger require Supabase + SQL setup.')
-tabs=st.tabs(['Dashboard','0DTE','Swings','LEAPS','Stocks','Crypto','Forex','Futures','Request a Signal','Market Sentiment','AI News','Paper Trading','Risk & System'])
+tabs=st.tabs(['Dashboard','0DTE','Swings','LEAPS','Stocks','Crypto','Request a Signal','Market Sentiment','AI News','Paper Trading','Risk & System'])
 def show_chart(symbol,mode,plan=None):
     fig,z=make_chart(symbol,mode,plan)
     if fig is None:
@@ -71,11 +71,14 @@ def explore(kind,preset):
                 st.write('Status:',a.get('status'),'· Bias:',a.get('side','WAIT'))
                 if a.get('status')=='SETUP':
                     st.write('Underlying entry:',a.get('entry'),'Stop:',a.get('stop'),'Target:',a.get('target'))
-for idx,kind,default in [(1,'0DTE','SPY'),(2,'Swings','IWM'),(3,'LEAPS','QQQ'),(4,'Stocks','AAPL'),(5,'Crypto','BTC-USD'),(6,'Forex','EURUSD=X'),(7,'Futures','NQ=F')]:
+for idx,kind,default in [(1,'0DTE','SPY'),(2,'Swings','IWM'),(3,'LEAPS','QQQ'),(4,'Stocks','AAPL'),(5,'Crypto','BTC-USD')]:
     with tabs[idx]: explore(kind,default)
-with tabs[8]:
+with tabs[6]:
     from core.request_signals import discover_contracts,CATEGORIES
+    from core.v1_primary_scanner import discover_v1_contracts
     st.subheader('🎯 Full-universe rotating discovery · best contracts')
+    scanner_mode=st.radio('Contract selection engine', ['V1 original scoring (primary; Alpaca)', 'V3 secondary research (Yahoo)'], index=0, horizontal=True)
+    st.caption('V1: original delta, bid/ask and spread scoring; raw ranking is preserved. Scores display at most 100 and do not represent win probability.')
     st.caption('Market-wide DISCOVERY ➜ daily liquidity prescreen ➜ 4H/1H/5M alignment ➜ actual option chain ➜ ranked Top 3. No single required ticker.')
     c1,c2,c3=st.columns(3)
     with c1:budget=st.number_input('Maximum 1-contract cost ($)',5,3000,100,5,key='universe_budget')
@@ -87,10 +90,10 @@ with tabs[8]:
             all_tickers,listing_notes=listed_symbols()
             screened,screen_notes=shortlist(all_tickers,sample_size=sample,shortlist_size=40,offset=rotation,min_price=0.50,min_dollar_volume=250_000)
         with st.spinner(f'Checking options on {len(screened)} liquid candidates...'):
-            found,chain_notes=discover_contracts(screened,budget)
-        st.session_state['requested_options']=(found,listing_notes+screen_notes+chain_notes,screened,len(all_tickers))
+            found,chain_notes=(discover_v1_contracts(screened,budget) if scanner_mode.startswith('V1') else discover_contracts(screened,budget))
+        st.session_state['requested_options']=(found,listing_notes+screen_notes+chain_notes,screened,len(all_tickers),scanner_mode)
     if 'requested_options' in st.session_state:
-        found,notes,screened,listed_count=st.session_state['requested_options']
+        found,notes,screened,listed_count,selected_engine=st.session_state['requested_options']
         st.caption(f'Listing universe: {listed_count:,} symbols · this pass up to {sample} symbols starting at {rotation:,} · deeper checks: {len(screened)}. Scores are liquidity/fit, NOT predicted profitability. For full coverage, run consecutive passes across the entire universe.')
         for group in CATEGORIES:
             st.markdown(f'### {group} — {len(found[group])} / 3 qualifying contracts')
@@ -103,15 +106,16 @@ with tabs[8]:
                     q1.metric('Option last',f"${rec['last']:.2f}" if rec['last'] is not None else 'N/A',f"{rec['percent_change']:+.1f}%" if rec['percent_change'] is not None else None)
                     q2.metric('Bid / Ask',f"${rec['bid']:.2f} / ${rec['ask']:.2f}")
                     q3.metric('Ask × 100',f"${rec['cost']:,.0f}")
-                    q4.metric('Rank (not odds)',f"{rec['rank_score']:.1f}/100")
-                    st.caption(f"Volume: {rec['volume']:,} · OI: {rec['open_interest']:,} · Spread: {rec['spread_pct']:.1f}% · Last option trade: {rec['last_trade_at']}")
+                    q4.metric('Rank (not odds)',f"{min(100,max(0,rec['rank_score'])):.1f}/100")
+                    st.caption(f"Volume: {rec['volume']:,} · OI: {rec['open_interest']:,} · Spread: {rec['spread_pct']:.1f}% · Last option trade: {rec['last_trade_at']}" if rec.get('volume') is not None and rec.get('open_interest') is not None else f"V1 snapshot · Spread: {rec['spread_pct']:.1f}% · Delta: {rec.get('delta') if rec.get('delta') is not None else 'N/A'} · Quote timestamp: {rec['last_trade_at']}")
                     with st.expander(f'📈 {sym} {"5-minute" if group=="0DTE" else "daily" if group=="Swings" else "weekly"} chart with key levels',expanded=True):
                         show_chart(sym,group)
+                    st.caption(rec.get('quote_warning',''))
                     st.caption('Option premium OHLC and valid premium stops/targets are unavailable from this feed. The chart shows UNDERLYING movement, not the contract price. Confirm quotes before decisions.')
         with st.expander(f'Market-data and screening notices ({len(notes)})'):
             for note in notes[:100]:st.caption(note)
         st.warning('Free data may be delayed, incomplete or rate-limited. 0DTE only when same-day contracts exist. No real orders or automated investment advice.')
-with tabs[9]:
+with tabs[7]:
     st.subheader('Rule-based market sentiment proxy')
     st.caption('This is not a licensed fear/greed, fund flow or options positioning feed.')
     data=[]
@@ -119,22 +123,23 @@ with tabs[9]:
         for sym in ['SPY','QQQ','IWM','XLF','XLK','TLT','GLD','BTC-USD']:
             x=confluence(sym);data.append({'symbol':sym,'4h_trend':(x.get('frames',{}).get('4h') or {}).get('trend','unknown'),'aligned_setup':x['status']=='SETUP'})
         st.dataframe(pd.DataFrame(data),use_container_width=True)
-with tabs[10]:
+with tabs[8]:
     st.subheader('AI News Intelligence')
     st.dataframe(pd.DataFrame(fetch('news_articles',100)),use_container_width=True)
     st.subheader('Recent classifications');st.dataframe(pd.DataFrame(fetch('news_analysis',50)),use_container_width=True)
-with tabs[11]:
-    st.subheader('Simulated positions — NOT brokerage orders')
+with tabs[9]:
+    st.subheader('Simulated stock / spot-crypto positions — NOT brokerage orders')
+    st.caption('Options are researched in 0DTE, Swings, LEAPS and Request a Signal. Option-contract paper fills are not supported by this simplified ledger.')
     st.dataframe(pd.DataFrame(fetch('paper_trades',100)),use_container_width=True)
     st.warning('Educational simulation: no fill model, slippage, funding, margin, contract multipliers or mark-to-market reconciliation. Do not treat as accurate performance.')
     with st.form('paper_form'):
-        sym=st.text_input('Symbol','SPY');asset=st.selectbox('Asset class',['stock','crypto','forex','future']);side=st.selectbox('Side',['BUY','SELL'])
+        sym=st.text_input('Symbol','SPY');asset=st.selectbox('Asset class',['stock','crypto']);side=st.selectbox('Side',['BUY','SELL'])
         entry=st.number_input('Hypothetical entry',min_value=0.01,value=100.0);stop=st.number_input('Stop',min_value=0.01,value=98.0);target=st.number_input('Target',min_value=0.01,value=104.0)
         equity=st.number_input('Simulation account equity',min_value=1.0,value=10000.0)
         consent=st.checkbox('I understand this records an illustrative paper position only, not an order.')
         submitted=st.form_submit_button('Record hypothetical paper position',disabled=not consent)
     if submitted:st.write(open_paper_trade(sym,asset,side,entry,stop,target,equity,equity,equity))
-with tabs[12]:
+with tabs[10]:
     st.subheader('Hard safety gates')
     st.write('Live execution: **DISABLED**. No API method capable of submitting brokerage orders is present.')
     st.write('Paper risk defaults: 1% equity risk/trade, 5% daily drawdown guard, 10% per-symbol allocation, 25% gross exposure cap.')
@@ -174,3 +179,30 @@ with st.expander('Opt-in autonomous paper simulation monitoring',expanded=False)
 with st.expander('Signal history and research attribution',expanded=False):
     from core.research_analytics import summarize_signals
     st.write(summarize_signals(fetch('ultimate_signals',500)))
+
+# SPX-focused read-only research panel. SPY is an ETF proxy with traded volume;
+# cash-index SPX volume is often absent. Never treat SPY levels as SPX levels.
+with st.expander('⚡ SPX scalping lab · volume profile / pressure proxies (research only)',expanded=False):
+    from core.spx_scalping import volume_profile_proxy, pressure_proxy
+    st.caption('TradingView Pine v6 companion: tradingview/Shadow_Trader_SPX_Aggressive_v6.pine. Load on a 1-minute chart. This panel is independent of live broker execution.')
+    proxy_symbol=st.selectbox('OHLCV feed to inspect',['SPY','^GSPC','QQQ'],key='spx_proxy_symbol')
+    st.warning('SPY is a TRADED ETF proxy, NOT the SPX index. Never copy SPY price levels onto SPX contracts. Index volume may be missing. These are candle-pressure estimates, not verified bid/ask delta or options order flow.')
+    if st.button('Calculate completed-bar volume profile and pressure',key='spx_profile_calc'):
+        try:
+            minute_bars=history(proxy_symbol,period='5d',interval='1m')
+            # Discard latest potentially forming minute bar, regardless of API timestamp.
+            minute_bars=minute_bars.iloc[:-1]
+            prof=volume_profile_proxy(minute_bars)
+            pressure=pressure_proxy(minute_bars)
+            if not prof or not pressure:
+                st.info('No reliable volume profile available from this feed. Index volume is often missing; try SPY.')
+            else:
+                a,b,c=st.columns(3)
+                a.metric('Approx. point of control',f"{prof['poc']:.2f}")
+                b.metric('70% value-area low',f"{prof['value_area_low']:.2f}")
+                c.metric('70% value-area high',f"{prof['value_area_high']:.2f}")
+                st.write(f"Close-location pressure: {pressure['close_location_pressure']:+.3f} ({pressure['interpretation']})")
+                st.bar_chart(pd.DataFrame(prof['histogram']).set_index('price')['volume'],horizontal=True)
+                st.caption(prof['source']+' · '+pressure['source']+' · Up to five days of available 1m bars (rolling 1170-minute approximation).')
+        except Exception:
+            st.error('Data provider did not return valid minute bars. No signal or trade was generated.')

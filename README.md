@@ -9,3 +9,6 @@ Streamlit multi-tab technical market dashboard; scanner persisting to `ultimate_
 Fully autonomous simulated fills and lifecycle, self-training predictive AI, licensed dark-pool feed, production-grade options/futures/forex execution simulation, Robinhood writes, live trades, payment/subscriptions, multi-user security and complete commercial data licensing. These are **not** represented as complete; see `FEATURE_STATUS.md`.
 
 This is not an investment recommendation or a guarantee of results. Do not deploy publicly with only a single shared password. Keep secrets outside GitHub and do not modify your working V2 service.
+
+
+**Current asset focus:** Options, stocks, spot crypto only. See `SCOPE_OPTIONS_STOCKS_CRYPTO.md`. Futures/forex removed from active dashboard and scanning; no live trading activation.

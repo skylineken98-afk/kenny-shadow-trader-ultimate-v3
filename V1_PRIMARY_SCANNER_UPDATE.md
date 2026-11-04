@@ -1,0 +1,4 @@
+# V1 original scoring is primary
+The Request a Signal tab now defaults to the read-only Alpaca option-snapshot scanner with V1 spread/affordability/delta scoring. Raw quality scores preserve original candidate ordering; visible scores clamp to [0,100]. The V3 Yahoo scanner remains selectable as secondary research. The original legacy scanner also now saves a bounded score and a separate raw_score.
+
+Requirements: valid `ALPACA_API_KEY`, `ALPACA_API_SECRET` in the app server environment; no keys embedded in this ZIP. Alpaca-py added to requirements. Missing credentials produce explicit warnings, no made-up results or silent fallback. V1 scanner requires confirmed underlying market setup; option chain snapshots have variable coverage. SPX index options may not be available from the underlying feed. Check live quote freshness, contract eligibility and tradability with a broker. This update makes no live trades.
