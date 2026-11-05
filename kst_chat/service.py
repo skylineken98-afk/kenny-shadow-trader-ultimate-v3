@@ -74,6 +74,15 @@ def snapshot(store,message="",user=None):
  gather('spx_proxy','kst_market_proxy',{'select':'updated_at,payload','id':'eq.SPX','limit':1},'X','updated_at')
  try:context['paper_accounts']=store.call('POST','rpc/kst_ai_progress',data={})
  except Exception:context['paper_accounts']={'status':'unavailable'}
+ # Add focused market-research evidence without changing broker permissions.
+ try:
+  from .market_research import market_research
+  research, extra_sources = market_research(store, message, now)
+  if research:
+   context['market_research'] = research
+   sources.extend(extra_sources)
+ except Exception:
+  context['market_research'] = {'status':'UNAVAILABLE'}
  return context,sources
 
 def handle(method,path,body,user,store,env,http=http_json,emit=None):
