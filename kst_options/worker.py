@@ -4,7 +4,7 @@ from datetime import timedelta
 from .engine import utcnow,stamp,parse,NY,BUDGETS,candidate,deadline,mark,num,requested_choices,context_label,affordable
 from .store import Store
 from .provider import Provider
-from .universe import universe,diverse_choices,rotating_batch
+from .universe import universe,diverse_choices,rotating_batch,enrichment_shortlist
 from .evidence_ranking import activity,rank_with_evidence,sector_returns
 from .learning import active,train
 log=logging.getLogger('kst_options')
@@ -60,18 +60,14 @@ def scan(store,provider,now):
     c['context_label']=context_label(c,setup,now);c['context_at']=setup.get('created_at') if setup else None
  # Enrich a bounded shortlist rather than querying metadata for every chain item.
  # All enrichment is read-only. No absent metric is treated as confirmed 0 flow.
- shortlist=[]
- for symbol in symbols:
-  eligible=[c for c in candidates.values() if c['underlying']==symbol and c['quality_label']=='QUALIFIED']
-  eligible.sort(key=lambda c:(not str(c.get('context_label','')).endswith('_SETUP_ALIGNED'),-c['score']))
-  shortlist.extend(eligible[:2])
+ shortlist=enrichment_shortlist(candidates.values(),limit=36)
  sector_data={}
  try:sector_data=sector_returns(symbols,now)
  except Exception:log.warning('Sector return research unavailable')
  day_volumes={}
  if shortlist:
   try:day_volumes=provider.daily_volumes([c['contract'] for c in shortlist],now)
-  except Exception:log.warning('Option bar volume data unavailable; ranking remains structural where absent')
+  except Exception as exc:log.warning('Option bar volume data unavailable (%s; HTTP %s); ranking remains structural where absent',type(exc).__name__,getattr(exc,'status_code','unavailable'))
  for c in shortlist:
   sym=c['contract']
   bar=day_volumes.get(sym) or {}
