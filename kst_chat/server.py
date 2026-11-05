@@ -57,7 +57,7 @@ class Handler(BaseHTTPRequestHandler):
     except (ValueError,UnicodeDecodeError):raise ApiError(400,'Invalid JSON')
     if not isinstance(body,dict):raise ApiError(400,'Expected a JSON object')
    streaming=path=='/api/chat/stream' and self.command=='POST'
-   result=handle(self.command,'/api/chat/message' if streaming else path,body,user,Store(),os.environ,emit=self.emit if streaming else None)
+   result=handle(self.command,'/api/chat/message' if streaming else path,body,user,Store(),os.environ,emit=self.emit if streaming else None,ai_key=self.headers.get('X-KST-User-AI-Key') if path in ('/api/chat/message','/api/chat/stream') else None)
    if streaming:self.emit({'type':'done','result':result})
    else:self.reply(200,result)
   except ApiError as exc:self.reply(exc.status,{'error':exc.message})
