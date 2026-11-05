@@ -18,7 +18,7 @@ st.title('⚡ Kenny Shadow Trader Ultimate V3 · Options / Stocks / Crypto')
 st.caption('BETA • Rules-based market scan • Paper simulations only • Live orders permanently disabled in this build')
 if not password:st.warning('APP_PASSWORD is not configured. Set it before exposing the dashboard publicly; service-role credentials must remain server-side.')
 if client() is None:st.warning('Supabase is not configured. Live market exploration works; persistence, news history and paper ledger require Supabase + SQL setup.')
-tabs=st.tabs(['Dashboard','0DTE','Swings','LEAPS','Stocks','Crypto','Request a Signal','Market Sentiment','AI News','Paper Trading','Risk & System'])
+tabs=st.tabs(['Dashboard','0DTE','Swings','LEAPS','Stocks','Crypto','Request a Signal','Market Sentiment','AI News','Paper Trading','Risk & System','Money Flow & Sector Rotation'])
 def show_chart(symbol,mode,plan=None):
     fig,z=make_chart(symbol,mode,plan)
     if fig is None:
@@ -206,3 +206,28 @@ with st.expander('⚡ SPX scalping lab · volume profile / pressure proxies (res
                 st.caption(prof['source']+' · '+pressure['source']+' · Up to five days of available 1m bars (rolling 1170-minute approximation).')
         except Exception:
             st.error('Data provider did not return valid minute bars. No signal or trade was generated.')
+
+# Sector leadership uses completed daily ETF bars, NOT tick-level capital flows.
+with tabs[11]:
+    from core.sector_rotation import screen_sector_data
+    st.subheader('💸 Money Flow & Sector Rotation · all 11 sectors')
+    st.caption('Ranked by 20-session ETF return relative to SPY. OHLCV price and volume PRESSURE PROXIES only; not ETF creations/redemptions, dark-pool trades, institutional purchases, or confirmed net inflows.')
+    @st.cache_data(ttl=900, show_spinner=False)
+    def _cached_sector_screen():
+        return screen_sector_data()
+    if st.button('Refresh sector ranking', key='sector_refresh'):
+        _cached_sector_screen.clear()
+    with st.spinner('Checking daily ETF history across the 11 sectors...'):
+        sector_rows, sector_notices = _cached_sector_screen()
+    if sector_rows:
+        st.dataframe(pd.DataFrame(sector_rows), use_container_width=True, hide_index=True)
+        leaders = sector_rows[:3]
+        laggards = sector_rows[-3:][::-1]
+        c1, c2 = st.columns(2)
+        c1.write('**Relative leaders:** ' + ', '.join(r['ETF'] for r in leaders))
+        c2.write('**Relative laggards:** ' + ', '.join(r['ETF'] for r in laggards))
+        st.caption('As-of dates appear per ETF. Ranking refreshes at most every 15 minutes; only completed sessions are evaluated, so it is NOT a real-time money-flow feed. Always verify delayed Yahoo ETF history against a licensed market source before trading.')
+    else:
+        st.warning('No verified sector leaderboard available from the provider. No placeholder rankings were generated.')
+    for notice in sector_notices:
+        st.caption(notice)
