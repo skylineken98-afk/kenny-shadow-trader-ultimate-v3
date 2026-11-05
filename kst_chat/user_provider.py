@@ -10,7 +10,7 @@ from urllib.error import HTTPError,URLError
 
 PROVIDERS={
     "openai":("gpt-4.1-mini","https://api.openai.com/v1/responses"),
-    "anthropic":("claude-haiku-4-5-20251001","https://api.anthropic.com/v1/messages"),
+    "anthropic":("claude-haiku-5-5","https://api.anthropic.com/v1/messages"),
     "google":("gemini-2.5-flash","https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"),
 }
 # Fixed allowlist prevents attacker-chosen costly models or arbitrary endpoints.
@@ -72,6 +72,8 @@ def complete(provider,key,inputs,instructions,max_tokens,emit=None,openai_http=N
     provider_config(provider)
     key=validate_key(provider,key)
     max_tokens=min(2000,max(256,int(max_tokens)))
+    if provider!="openai" and any(isinstance(i.get("content"),list) for i in inputs):
+        raise ApiError(400,"Chart images currently require the OpenAI API connection")
     if provider=="openai":
         from .logic import response_text
         url=PROVIDERS["openai"][1]
