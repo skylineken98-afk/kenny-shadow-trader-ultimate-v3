@@ -1,5 +1,6 @@
 import unittest
-from kst_options.universe import universe,diverse_choices,DEFAULT_SYMBOLS
+from datetime import datetime,timezone,timedelta
+from kst_options.universe import universe,diverse_choices,rotating_batch,DEFAULT_SYMBOLS
 from kst_options.engine import requested_choices
 
 def c(ticker,score,kind="PUT",quality="QUALIFIED",context="BEARISH_SETUP_ALIGNED"):
@@ -15,6 +16,15 @@ class DiversificationTest(unittest.TestCase):
         self.assertIn("LLY",DEFAULT_SYMBOLS)
         self.assertIn("IWM",DEFAULT_SYMBOLS)
         self.assertGreaterEqual(len(universe()),20)
+    def test_batches_rotate_without_repeating_inside_batch(self):
+        names=list(DEFAULT_SYMBOLS)
+        t=datetime(2026,11,5,19,0,tzinfo=timezone.utc)
+        a=rotating_batch(names,t,12)
+        b=rotating_batch(names,t+timedelta(minutes=5),12)
+        self.assertEqual(len(a),12)
+        self.assertEqual(len(set(a)),12)
+        self.assertNotEqual(a,b)
+        self.assertTrue(set(a).union(b).issubset(set(names)))
     def test_env_validates_caps_dedup(self):
         self.assertEqual(universe(" aapl, AAPL, nVda, bad$",),["AAPL","NVDA"])
     def test_diverse_choices_prevent_one_ticker_domination(self):
