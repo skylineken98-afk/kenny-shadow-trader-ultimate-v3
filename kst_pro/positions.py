@@ -12,7 +12,7 @@ def refresh(store,now,http=None):
   offset+=200
  symbols=list(dict.fromkeys(r['symbol'] for r in rows));quotes={}
  for i in range(0,len(symbols),100):
-  response=(http or requests.get)('https://data.alpaca.markets/v2/stocks/quotes/latest',params={'symbols':','.join(symbols[i:i+100]),'feed':os.getenv('STOCK_FEED','iex') or 'iex'},headers={'APCA-API-KEY-ID':os.environ['ALPACA_API_KEY'],'APCA-API-SECRET-KEY':os.environ['ALPACA_API_SECRET']},timeout=20)
+  response=(http or requests.get)('https://data.alpaca.markets/v2/stocks/quotes/latest',params={'symbols':','.join(symbols[i:i+100]),'feed':os.getenv('STOCK_FEED','iex') or 'iex'},headers={'APCA-API-KEY-ID':os.environ['ALPACA_API_KEY'].strip(),'APCA-API-SECRET-KEY':os.environ['ALPACA_API_SECRET'].strip()},timeout=20)
   if not response.ok:raise RuntimeError('Private position quote feed unavailable')
   quotes.update(response.json().get('quotes',{}))
  for row in rows:

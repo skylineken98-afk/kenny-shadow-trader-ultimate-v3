@@ -30,7 +30,7 @@ def refresh(store,now,http=None):
  opened=store.rows('kst_stock_plans',state='eq.OPEN',order='created_at.asc',limit=100)
  symbols=list(dict.fromkeys(symbols+[r['symbol'] for r in opened]))
  if not symbols:return
- response=http('https://data.alpaca.markets/v2/stocks/snapshots',params={'symbols':','.join(symbols),'feed':feed},headers={'APCA-API-KEY-ID':os.environ['ALPACA_API_KEY'],'APCA-API-SECRET-KEY':os.environ['ALPACA_API_SECRET']},timeout=20)
+ response=http('https://data.alpaca.markets/v2/stocks/snapshots',params={'symbols':','.join(symbols),'feed':feed},headers={'APCA-API-KEY-ID':os.environ['ALPACA_API_KEY'].strip(),'APCA-API-SECRET-KEY':os.environ['ALPACA_API_SECRET'].strip()},timeout=20)
  if not response.ok:raise RuntimeError('Stock data unavailable; check feed entitlement')
  snapshots=response.json();now=utcnow()
  for p in opened:

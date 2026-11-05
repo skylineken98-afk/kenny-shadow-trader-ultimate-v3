@@ -1,7 +1,7 @@
 import os,requests
 class Provider:
  def __init__(self):
-  self.headers={'APCA-API-KEY-ID':os.environ['ALPACA_API_KEY'],'APCA-API-SECRET-KEY':os.environ['ALPACA_API_SECRET']}
+  self.headers={'APCA-API-KEY-ID':os.environ['ALPACA_API_KEY'].strip(),'APCA-API-SECRET-KEY':os.environ['ALPACA_API_SECRET'].strip()}
   self.feed=os.getenv('OPTIONS_FEED','opra')
   if self.feed not in ('opra','indicative'):raise ValueError('OPTIONS_FEED must be opra or indicative')
  def get(self,path,params):

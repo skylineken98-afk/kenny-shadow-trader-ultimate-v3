@@ -39,7 +39,7 @@ def refresh(store,now):
  import requests
  feed=os.getenv('STOCK_FEED','sip')
  if feed not in ('sip','iex'):raise ValueError('STOCK_FEED must be sip or iex')
- r=requests.get('https://data.alpaca.markets/v2/stocks/SPY/trades/latest',params={'feed':feed},headers={'APCA-API-KEY-ID':os.environ['ALPACA_API_KEY'],'APCA-API-SECRET-KEY':os.environ['ALPACA_API_SECRET']},timeout=20)
+ r=requests.get('https://data.alpaca.markets/v2/stocks/SPY/trades/latest',params={'feed':feed},headers={'APCA-API-KEY-ID':os.environ['ALPACA_API_KEY'].strip(),'APCA-API-SECRET-KEY':os.environ['ALPACA_API_SECRET'].strip()},timeout=20)
  if not r.ok:raise RuntimeError('SPY data access unavailable')
  payload=estimate(anchor(now),r.json().get('trade',{}),now,feed)
  store.call('POST','kst_market_proxy',data={'id':'SPX','updated_at':stamp(now),'payload':payload},prefer='resolution=merge-duplicates,return=minimal')
