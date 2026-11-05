@@ -45,7 +45,7 @@ def scan(store,provider,now):
      quote_now=utcnow()
      c=candidate(contract,snapshot,quote_now,provider.feed,weights) or candidate(contract,snapshot,quote_now,provider.feed,weights,relaxed=True)
      if c:candidates[contract]=c
-   except Exception as exc:errors+=1;log.warning('Chain %s: %s',symbol,type(exc).__name__)
+   except Exception as exc:errors+=1;log.warning('Chain %s: %s; HTTP %s',symbol,type(exc).__name__,getattr(exc,'status_code','unavailable'))
  now=utcnow()
  candidates={k:c for k,c in candidates.items() if 0<=(now-parse(c['quote_at'])).total_seconds()<=300}
  for symbol in symbols:
