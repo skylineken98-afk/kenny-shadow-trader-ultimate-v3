@@ -90,8 +90,11 @@ def handle(method,path,body,user,store,env,http=http_json,emit=None,ai_key=None)
  from kst_pro.routes import PREFIXES,handle as extra_handle
  from kst_pro.membership import require_access
  try:
+  # A user's own AI key must not bypass KST's paid research entitlement.
+  premium=('/api/chat/message','/api/chat/suggestions','/api/chat/market-refresh',
+           '/api/chat/ticker-search','/api/chat/history-search')
+  if path in premium:require_access(store,user,env)
   if path.startswith(PREFIXES):return extra_handle(method,path,body,user,store,env)
-  if path=='/api/chat/message' or (path=='/api/chat/suggestions' and method=='POST'):require_access(store,user,env)
  except PermissionError as exc:raise ApiError(403,str(exc))
  except ValueError as exc:raise ApiError(400,str(exc))
  if path=='/api/chat/suggestions':
