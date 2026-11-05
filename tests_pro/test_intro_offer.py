@@ -71,7 +71,7 @@ def test_unsigned_or_canceled_checkout_never_redeems_code(monkeypatch):
  db=Store()
  membership.checkout(db,USER,{'request_id':str(uuid.uuid4()),'promo_code':'MAYVI'},ENV)
  raw=json.dumps({'id':'evt_check','created':100,'livemode':False,'type':'checkout.session.completed',
-                 'data':{'object':{'id':'cs_intro_test','subscription':'sub_intro_test'}}}).encode()
+                 'data':{'object':{'id':'cs_intro_test','subscription':'sub_introtest'}}}).encode()
  signed='t=1000,v1='+hmac.new(b'hook_secret',b'1000.'+raw,hashlib.sha256).hexdigest()
  with pytest.raises(ValueError):membership.webhook(db,raw,'t=1000,v1=forged',ENV,now=1000)
  assert all(x[0]!='rpc/kst_redeem_intro' for x in db.calls)
