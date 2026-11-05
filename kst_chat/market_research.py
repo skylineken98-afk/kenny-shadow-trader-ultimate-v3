@@ -57,11 +57,12 @@ def market_research(store, message, now=None):
         "disclaimer":"Rankings describe KST research hypotheses, NOT win probability or executable prices."}
     symbols=_symbols(message)
     try:
+        params={"underlying":"in.("+",".join(symbols)+")"} if symbols else {}
         opts=store.rows("kst_option_signals",select=(
             "created_at,underlying,contract,option_type,strike,expiration,category,"
             "score,quality_label,context_label,entry_ask,entry_bid,quote_at,feed,state"
         ),category="eq.Swings" if "swing" in message.lower() else "in.(Swings,0DTE,LEAPS)",
-            order="created_at.desc",limit=80)
+            order="created_at.desc",limit=80,**params)
         if symbols: opts=[x for x in opts if x.get("underlying") in symbols]
         unique={}
         for row in opts:
@@ -94,8 +95,9 @@ def market_research(store, message, now=None):
     except Exception:
         result["contract_candidates"]={"status":"UNAVAILABLE","reason":"KST contract feed/query failed"}
     try:
+        setup_params={"symbol":"in.("+",".join(symbols)+")"} if symbols else {}
         setups=store.rows("ultimate_signals",select="created_at,symbol,status,side,entry,stop,target,details",
-                          order="created_at.desc",limit=75)
+                          order="created_at.desc",limit=75,**setup_params)
         if symbols:setups=[r for r in setups if r.get("symbol") in symbols]
         unique={}
         for row in setups:
