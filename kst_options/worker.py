@@ -79,6 +79,17 @@ def scan(store,provider,now):
  if shortlist:
   try:day_volumes=provider.daily_volumes([c['contract'] for c in shortlist],now)
   except Exception as exc:log.warning('Option bar volume data unavailable (%s; HTTP %s); ranking remains structural where absent',type(exc).__name__,getattr(exc,'status_code','unavailable'))
+ # Preserve sampled contract-volume evidence separately from OI and quote sizes.
+ from .strike_volume import strike_activity
+ observed_strikes=strike_activity([c['contract'] for c in shortlist],day_volumes,
+                                  as_of=stamp(now),
+                                  universe_label='enrichment shortlist, not all market contracts')
+ try:
+  store.call('POST','kst_options_strike_activity',
+       data={'id':'latest','observed_at':stamp(now),'payload':observed_strikes},
+       prefer='resolution=merge-duplicates,return=minimal')
+ except Exception:
+  log.warning('Strike-volume report not stored; apply kst_options/market_pulse.sql')
  for c in shortlist:
   sym=c['contract']
   bar=day_volumes.get(sym) or {}
