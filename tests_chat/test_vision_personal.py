@@ -17,7 +17,7 @@ def test_chart_images_are_validated_normalized_and_not_saved():
   payloads.append(body);assert body['input'][-1]['content'][1]['type']=='input_image'
   assert body['store'] is False and 'No future candles means pending' in body['instructions']
   return {'output':[{'type':'message','content':[{'type':'output_text','text':'Visible reaction is pending.'}]}]}
- handle('POST','/api/chat/message',{'conversation_id':C1,'message':'','request_id':str(uuid.uuid4()),'images':[picture()]},U1,db,ENV,http)
+ handle('POST','/api/chat/message',{'conversation_id':C1,'message':'','request_id':str(uuid.uuid4()),'images':[picture()]},U1,db,ENV,http,ai_key='sk-vision-user-own-key')
  assert len(payloads)==1 and 'data:image' not in str(db.data)
  assert db.data['kst_chat_turns'][0]['attachments'][0]['image_retained'] is False
 
