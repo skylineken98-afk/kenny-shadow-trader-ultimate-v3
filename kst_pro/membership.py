@@ -5,6 +5,7 @@ from urllib.parse import urlsplit
 import requests
 from kst_options.engine import parse
 from .intro_offer import code_from_input,intro_coupon,intro_checkout_data
+from .pricing_policy import FIRST_YEAR_MONTHLY_CENTS,RENEWAL_MONTHLY_CENTS,validate_stripe_price,require_ready_for_subscription
 
 def is_admin(user,env):return user in [x.strip() for x in env.get('KST_ADMIN_USER_IDS','').split(',') if x.strip()]
 
@@ -36,13 +37,20 @@ def stripe_call(method,path,env,data=None,params=None,idempotency=None,http=None
 
 def checkout(store,user,body,env):
  if status(store,user,env)['pro']:raise ValueError('An active membership/pass already provides Pro access')
+ # Customers must never start a subscription without a verified year-two
+ # transition. Until the scheduled change is tested, checkout fails closed.
+ require_ready_for_subscription(env)
  ident=str(uuid.UUID(str(body.get('request_id'))));price=env.get('STRIPE_MONTHLY_PRICE_ID','')
  site=env.get('KST_SITE_URL','').rstrip('/');u=urlsplit(site)
  if u.scheme!='https' or not u.hostname or u.username or u.password or u.query or u.fragment or u.path not in ('','/'):raise ValueError('Configure KST_SITE_URL as the production HTTPS origin')
  if not env.get('STRIPE_WEBHOOK_SECRET'):raise ValueError('Stripe webhook signing is required before checkout can accept money')
  if not re.fullmatch(r'price_[A-Za-z0-9]+',price):raise ValueError('Configure the monthly Stripe price')
  price_info=stripe_call('GET','prices/'+price,env)
- if not price_info.get('active') or (price_info.get('recurring') or {}).get('interval')!='month' or (price_info.get('recurring') or {}).get('interval_count',1)!=1:raise ValueError('Configure an active monthly recurring Stripe price')
+ if not validate_stripe_price(price_info,FIRST_YEAR_MONTHLY_CENTS):raise ValueError('First-year Stripe price must be exactly $100 USD monthly')
+ renewal=str(env.get('STRIPE_YEAR_TWO_PRICE_ID') or '')
+ if not re.fullmatch(r'price_[A-Za-z0-9]+',renewal):raise ValueError('Configure the year-two Stripe price')
+ renewal_info=stripe_call('GET','prices/'+renewal,env)
+ if not validate_stripe_price(renewal_info,RENEWAL_MONTHLY_CENTS):raise ValueError('Year-two Stripe price must be exactly $150 USD monthly until a separately approved higher plan is offered')
  code=code_from_input(body.get('promo_code'))
  coupon=intro_coupon(env,stripe_call) if code else None
  reserved=False
