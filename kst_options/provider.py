@@ -10,7 +10,7 @@ class Provider:
   self.feed=os.getenv('OPTIONS_FEED','opra')
   if self.feed not in ('opra','indicative'):raise ValueError('OPTIONS_FEED must be opra or indicative')
  def get(self,path,params):
-  r=requests.get('https://data.alpaca.markets'+path,params={**params,'feed':self.feed},headers=self.headers,timeout=30)
+  r=requests.get('https://data.alpaca.markets'+path,params={**params,**({'feed':self.feed} if '/snapshots/' in path or '/quotes/' in path else {})},headers=self.headers,timeout=30)
   if not r.ok:raise ProviderError(r.status_code)
   return r.json()
  def chain(self,symbol,lo,hi):
@@ -30,47 +30,52 @@ class Provider:
   return result
 
  def daily_volumes(self, contracts, now):
-  """Aggregate volume bars; missing historical bars are NOT zero-volume."""
+  """Cumulative 1-hour option bars, same-time-of-day historical comparison.
+
+  Indicative option history is delayed; do not request up to the current
+  minute or compare today's partial session to prior full daily bars.
+  """
   from datetime import timedelta,datetime
   from zoneinfo import ZoneInfo
   ny=ZoneInfo('America/New_York')
-  today=now.astimezone(ny).date()
+  safe_end=now-timedelta(minutes=20) if self.feed=='indicative' else now
+  cutoff=safe_end.astimezone(ny)
+  today=cutoff.date()
   found={}
   for i in range(0,len(contracts),30):
    batch=contracts[i:i+30]
-   params={'symbols':','.join(batch),'timeframe':'1Day',
-           'start':str(today-timedelta(days=18)),'end':now.isoformat(),
+   params={'symbols':','.join(batch),'timeframe':'1Hour',
+           'start':str(today-timedelta(days=18)),'end':safe_end.isoformat(),
            'limit':10000}
-   page_count=0
+   pages=0
    while True:
     data=self.get('/v1beta1/options/bars',params)
-    for sym,bars in data.get('bars',{}).items():
-     if sym in found:found[sym].extend(bars)
-     else:found[sym]=list(bars)
+    for sym,bars in (data.get('bars') or {}).items():
+     found.setdefault(sym,[]).extend(bars)
     token=data.get('next_page_token')
     if not token:break
-    page_count+=1
-    if page_count>=5:raise RuntimeError('Option bars pagination limit; incomplete')
+    pages+=1
+    if pages>=5:raise RuntimeError('Option bars pagination limit; incomplete')
     params['page_token']=token
   output={}
   for sym,bars in found.items():
-   dated=[]
+   daily={};seen={}
    for row in bars:
     try:
-     day=datetime.fromisoformat(row['t'].replace('Z','+00:00')).astimezone(ny).date()
+     t=datetime.fromisoformat(row['t'].replace('Z','+00:00')).astimezone(ny)
      v=int(row['v'])
-     if v<0:continue
-     dated.append((day,v,row['t']))
-    except (KeyError,ValueError,TypeError):continue
-   dated.sort()
-   current=[row for row in dated if row[0]==today]
-   prior=[row[1] for row in dated if row[0]<today]
-   latest=current[-1] if current else (dated[-1] if dated else None)
-   if latest:
-    output[sym]={'volume':latest[1],
-                 'as_of':latest[2],
-                 'historical_volume':prior,
-                 'current_session':bool(current)}
+     if v<0 or (t.hour,t.minute)>(cutoff.hour,cutoff.minute):continue
+     daily[t.date()]=daily.get(t.date(),0)+v
+     if t.date()==today and (today not in seen or t>seen[today]):seen[today]=t
+    except (KeyError,ValueError,TypeError,OverflowError):continue
+   if today not in daily:continue
+   previous=[v for d,v in sorted(daily.items()) if d<today]
+   output[sym]={'volume':daily[today],
+                'as_of':seen[today].isoformat() if today in seen else cutoff.isoformat(),
+                'historical_volume':previous[-5:],
+                'current_session':True,
+                'delayed':self.feed=='indicative',
+                'method':'1Hour option aggregates, prior sessions limited to same local clock cutoff'}
   return output
 
  def open_interest(self, contract, now):

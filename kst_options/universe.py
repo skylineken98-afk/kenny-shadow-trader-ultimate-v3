@@ -65,3 +65,26 @@ def rotating_batch(symbols, now, batch_size=12, cadence_seconds=300):
     slot=int(now.timestamp())//cadence
     offset=(slot*n)%len(symbols)
     return (symbols[offset:]+symbols[:offset])[:n]
+
+def enrichment_shortlist(candidates, budgets=(30,50,100,200,500,1000,3000),
+                         limit=36):
+    """Cover contracts likely to be published across categories and budgets.
+
+    Bounded discovery: never make a separate OI HTTP call for every contract in
+    an option chain. The returned set is NOT a complete market sample.
+    """
+    rows=[c for c in candidates if c.get("quality_label")=="QUALIFIED"]
+    seen=set();out=[]
+    # Large, small, then intermediate budgets; include all expiry categories.
+    order=[3000]+[b for b in budgets if b!=3000]
+    for budget in order:
+        for cat in ("0DTE","Swings","LEAPS"):
+            eligible=(c for c in rows if c.get("category")==cat
+                      and (c.get("entry_ask") or 0)>0
+                      and c["entry_ask"]*100<=budget)
+            for c in diverse_choices(eligible,3):
+                key=c.get("contract")
+                if not key or key in seen:continue
+                seen.add(key);out.append(c)
+                if len(out)>=limit:return out
+    return out
