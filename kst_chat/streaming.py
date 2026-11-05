@@ -1,6 +1,7 @@
 """Consume real Responses text deltas; require a terminal response before saving."""
 import json,time
 from urllib.request import Request,urlopen
+from urllib.error import HTTPError
 
 def consume(lines,emit):
  for line in lines:
@@ -16,7 +17,17 @@ def consume(lines,emit):
 
 def request(url,headers,payload,emit,timeout=55):
  start=time.monotonic();req=Request(url,data=json.dumps({**payload,'stream':True}).encode(),headers={**headers,'Content-Type':'application/json','Accept':'text/event-stream'})
- with urlopen(req,timeout=timeout) as response:
+ try:response=urlopen(req,timeout=timeout)
+ except HTTPError as exc:
+  from .service import ApiError
+  try:code=json.loads(exc.read(16384)).get('error',{}).get('code')
+  except (ValueError,AttributeError):code=None
+  if exc.code==401:raise ApiError(503,'OpenAI authorization failed; check the Railway API key and project access') from None
+  if code=='insufficient_quota':raise ApiError(503,'OpenAI API credits or project quota are exhausted. The site owner must check API billing.') from None
+  if exc.code==429:raise ApiError(429,'OpenAI request limit reached. Please wait before retrying.') from None
+  if exc.code in (400,403,404):raise ApiError(503,'OpenAI model or project access failed (HTTP '+str(exc.code)+'). The site owner must check provider configuration.') from None
+  raise ApiError(502,'OpenAI returned HTTP '+str(exc.code)+'. Please check history before retrying.') from None
+ with response:
   def lines():
    for line in response:
     if time.monotonic()-start>timeout:raise TimeoutError('Model stream timed out')

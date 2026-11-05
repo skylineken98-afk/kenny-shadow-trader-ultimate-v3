@@ -170,7 +170,8 @@ def handle(method,path,body,user,store,env,http=http_json,emit=None):
   if existing:
    if existing[0]['status']=='COMPLETE':return {'id':turn_id,'text':existing[0]['assistant_text'],'sources':existing[0]['sources'],'cached':True}
    raise ApiError(409,'This message is pending or failed; open history before sending again')
-  key=env.get('OPENAI_API_KEY')
+  key=(env.get('OPENAI_API_KEY') or '').strip()
+  if key and any(c.isspace() for c in key):raise ApiError(503,'The Railway OpenAI API key contains whitespace. Copy only the API key value.')
   if not key:raise ApiError(503,'Configure OPENAI_API_KEY on the Railway chat service')
   allowed=store.call('POST','rpc/kst_chat_reserve',data={'p_user':user,'p_daily':int(env.get('CHAT_DAILY_LIMIT','40')),'p_minute':6,'p_global':int(env.get('CHAT_GLOBAL_DAILY_LIMIT','500'))})
   if not allowed:raise ApiError(429,'KST Chat has reached its per-minute or daily message allowance')
