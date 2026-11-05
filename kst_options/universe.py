@@ -51,3 +51,17 @@ def diverse_choices(candidates,limit=3):
         out.append(c);contracts.add(c["contract"])
         if len(out)>=limit:break
     return out
+
+def rotating_batch(symbols, now, batch_size=12, cadence_seconds=300):
+    """Round-robin sampling across scan cycles to bound provider requests.
+
+    Does not assert that every symbol is scanned on every cycle; an interrupted
+    scanner may leave gaps. Logs should expose active batch coverage.
+    """
+    symbols=list(dict.fromkeys(symbols))
+    if not symbols:return []
+    n=min(len(symbols),max(1,int(batch_size)))
+    cadence=max(300,int(cadence_seconds))
+    slot=int(now.timestamp())//cadence
+    offset=(slot*n)%len(symbols)
+    return (symbols[offset:]+symbols[:offset])[:n]
