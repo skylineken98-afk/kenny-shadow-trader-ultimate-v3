@@ -24,12 +24,13 @@ class Store:
  def insert(self,table,row,**kw):self.data.setdefault(table,[]).append(row)
 
 ENV={'STRIPE_SECRET_KEY':'sk_test_owner_only_for_checkout','STRIPE_WEBHOOK_SECRET':'hook_secret',
-     'STRIPE_MONTHLY_PRICE_ID':'price_monthly','KST_SITE_URL':'https://kst.example',
+     'STRIPE_MONTHLY_PRICE_ID':'price_monthly','STRIPE_YEAR_TWO_PRICE_ID':'price_year2','KST_SITE_URL':'https://kst.example',
+     'KST_BILLING_PHASES_VERIFIED':'true',
      'STRIPE_INTRO_COUPON_ID':'kst_half_year'}
 
 def fake_stripe(method,path,env,data=None,**kwargs):
  if method=='GET' and path.startswith('prices/'):
-  return {'active':True,'recurring':{'interval':'month','interval_count':1}}
+  return {'active':True,'currency':'usd','unit_amount':15000 if path=='prices/price_year2' else 10000,'recurring':{'interval':'month','interval_count':1}}
  if method=='GET' and path.startswith('coupons/'):
   return {'valid':True,'percent_off':50,'duration':'repeating','duration_in_months':12}
  if method=='POST' and path=='checkout/sessions':
