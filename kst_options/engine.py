@@ -69,8 +69,9 @@ def affordable(ask,budget,fee=0):
  except (InvalidOperation,ValueError,TypeError):return False
 
 def requested_choices(candidates,category,budget,fee=0):
+ from .universe import diverse_choices
  choices=[c for c in candidates if c['category']==category and affordable(c['entry_ask'],budget,fee)]
- return sorted(choices,key=lambda c:(c['quality_label']!='QUALIFIED',not c.get('context_label','').endswith('SETUP_ALIGNED'),-c['score'],c['contract']))[:3]
+ return diverse_choices(choices,3)
 
 def context_label(contract,setup,now):
  if not setup or setup.get('status')!='SETUP':return 'STRUCTURAL_ONLY'

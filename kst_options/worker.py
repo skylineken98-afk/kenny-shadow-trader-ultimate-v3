@@ -4,6 +4,8 @@ from datetime import timedelta
 from .engine import utcnow,stamp,parse,NY,BUDGETS,candidate,deadline,mark,num,requested_choices,context_label,affordable
 from .store import Store
 from .provider import Provider
+from .universe import universe,diverse_choices,rotating_batch
+from .evidence_ranking import activity,rank_with_evidence,sector_returns
 from .learning import active,train
 log=logging.getLogger('kst_options')
 def track(store,provider,now):
@@ -36,7 +38,9 @@ def publish_request_choice(store,c,req,now,fee,version):
 def scan(store,provider,now):
  started=now
  weights,version=active(store);day=now.astimezone(NY).date();candidates={};errors=0
- symbols=list(dict.fromkeys(x.strip().upper() for x in os.getenv('OPTIONS_SYMBOLS','SPY,QQQ,IWM').split(',') if x.strip()))
+ all_symbols=universe()
+ cadence=max(300,int(os.getenv('OPTIONS_SCAN_SECONDS','300')))
+ symbols=rotating_batch(all_symbols,started,int(os.getenv('OPTIONS_UNIVERSE_BATCH','12')),cadence)
  # No silent fallback from OPRA to indicative. Index coverage is provider dependent.
  for symbol in symbols:
   for lo,hi in [(day,day+timedelta(days=45)),(day+timedelta(days=270),day+timedelta(days=730))]:
@@ -54,6 +58,35 @@ def scan(store,provider,now):
   for c in candidates.values():
    if c['underlying']==symbol:
     c['context_label']=context_label(c,setup,now);c['context_at']=setup.get('created_at') if setup else None
+ # Enrich a bounded shortlist rather than querying metadata for every chain item.
+ # All enrichment is read-only. No absent metric is treated as confirmed 0 flow.
+ shortlist=[]
+ for symbol in symbols:
+  eligible=[c for c in candidates.values() if c['underlying']==symbol and c['quality_label']=='QUALIFIED']
+  eligible.sort(key=lambda c:(not str(c.get('context_label','')).endswith('_SETUP_ALIGNED'),-c['score']))
+  shortlist.extend(eligible[:2])
+ sector_data={}
+ try:sector_data=sector_returns(symbols,now)
+ except Exception:log.warning('Sector return research unavailable')
+ day_volumes={}
+ if shortlist:
+  try:day_volumes=provider.daily_volumes([c['contract'] for c in shortlist],now)
+  except Exception:log.warning('Option bar volume data unavailable; ranking remains structural where absent')
+ for c in shortlist:
+  sym=c['contract']
+  bar=day_volumes.get(sym) or {}
+  oi=None
+  try:oi=provider.open_interest(sym,now)
+  except Exception:log.warning('Open interest unavailable for %s',sym)
+  # Do not describe previous-session volume as live current session volume.
+  if bar and not bar.get('current_session'):bar={}
+  a=activity(contract_volume=bar.get('volume'),
+             open_interest=(oi or {}).get('open_interest'),
+             historical_volume=bar.get('historical_volume'),
+             as_of=bar.get('as_of'),oi_date=(oi or {}).get('date'),
+             source='Alpaca option daily aggregates / contract metadata; feed and entitlements apply')
+  updated=rank_with_evidence(c,a,sector_data.get(c['underlying']))
+  candidates[sym]=updated
  fee=num(os.getenv('OPTIONS_ROUND_TRIP_FEE','0'))
  if fee is None or fee<0:raise ValueError('Invalid fee estimate')
  batch=str(uuid.uuid4());rows=[]
@@ -66,7 +99,7 @@ def scan(store,provider,now):
   offset+=500
  for cat in ('0DTE','Swings','LEAPS'):
   for budget in BUDGETS:
-   choices=sorted((c for c in candidates.values() if c['quality_label']=='QUALIFIED' and c['category']==cat and affordable(c['entry_ask'],budget,fee)),key=lambda c:(-c['score'],c['contract']))[:3]
+   choices=diverse_choices((c for c in candidates.values() if c['quality_label']=='QUALIFIED' and c['category']==cat and affordable(c['entry_ask'],budget,fee)),3)
    for c in choices:
     if (c['contract'],cat,float(budget)) in existing:continue
     rows.append(dict(c,id=str(uuid.uuid4()),created_at=stamp(now),batch_id=batch,budget=budget,fee_estimate=fee,model_version=version,due_at=stamp(deadline(c,now)),state='OPEN'))
@@ -80,7 +113,7 @@ def scan(store,provider,now):
   message=f'{len(published)} fresh contracts found; '+('three ranked ideas returned.' if len(published)==3 else 'fewer than three valid quotes available; no contracts invented.')
   if errors:message+=' Some chain requests failed; results are incomplete.'
   store.patch('kst_signal_requests',req['id'],{'status':'DONE','completed_at':stamp(utcnow()),'results':published,'message':message})
- store.health('DEGRADED' if errors else 'OK',f'{len(candidates)} qualifying contracts; {len(rows)} new research records; {errors} failed chain requests. Feed: {provider.feed}. No orders submitted.')
+ store.health('DEGRADED' if errors else 'OK',f'{len(symbols)}/{len(all_symbols)} symbols scanned this cycle; {len(candidates)} qualifying contracts; {len(rows)} new research records; {errors} failed chain requests. Feed: {provider.feed}. No orders submitted.')
 def run():
  store=Store();provider=None;last_scan=0;last_news=0;last_proxy=0;last_stocks=0
  while True:
