@@ -4,7 +4,7 @@ from datetime import timedelta
 from .engine import utcnow,stamp,parse,NY,BUDGETS,candidate,deadline,mark,num,requested_choices,context_label,affordable
 from .store import Store
 from .provider import Provider
-from .universe import universe,diverse_choices
+from .universe import universe,diverse_choices,rotating_batch
 from .learning import active,train
 log=logging.getLogger('kst_options')
 def track(store,provider,now):
@@ -37,7 +37,9 @@ def publish_request_choice(store,c,req,now,fee,version):
 def scan(store,provider,now):
  started=now
  weights,version=active(store);day=now.astimezone(NY).date();candidates={};errors=0
- symbols=universe()
+ all_symbols=universe()
+ cadence=max(300,int(os.getenv('OPTIONS_SCAN_SECONDS','300')))
+ symbols=rotating_batch(all_symbols,started,int(os.getenv('OPTIONS_UNIVERSE_BATCH','12')),cadence)
  # No silent fallback from OPRA to indicative. Index coverage is provider dependent.
  for symbol in symbols:
   for lo,hi in [(day,day+timedelta(days=45)),(day+timedelta(days=270),day+timedelta(days=730))]:
@@ -81,7 +83,7 @@ def scan(store,provider,now):
   message=f'{len(published)} fresh contracts found; '+('three ranked ideas returned.' if len(published)==3 else 'fewer than three valid quotes available; no contracts invented.')
   if errors:message+=' Some chain requests failed; results are incomplete.'
   store.patch('kst_signal_requests',req['id'],{'status':'DONE','completed_at':stamp(utcnow()),'results':published,'message':message})
- store.health('DEGRADED' if errors else 'OK',f'{len(candidates)} qualifying contracts; {len(rows)} new research records; {errors} failed chain requests. Feed: {provider.feed}. No orders submitted.')
+ store.health('DEGRADED' if errors else 'OK',f'{len(symbols)}/{len(all_symbols)} symbols scanned this cycle; {len(candidates)} qualifying contracts; {len(rows)} new research records; {errors} failed chain requests. Feed: {provider.feed}. No orders submitted.')
 def run():
  store=Store();provider=None;last_scan=0;last_news=0;last_proxy=0;last_stocks=0
  while True:
