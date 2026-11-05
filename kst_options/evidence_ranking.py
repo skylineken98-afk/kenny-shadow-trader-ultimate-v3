@@ -81,27 +81,22 @@ def rank_with_evidence(candidate, activity_data=None, sector_data=None):
     rel=number(rs.get("relative_strength_pct_points"))
     score=0.70*base
     checks=0
-    # Weighted percentiles are heuristic, not win probabilities.
-    if vol is not None:
-        score+=7*min(1,vol/500); checks+=1
-    if oi is not None:
-        score+=7*min(1,oi/1000); checks+=1
-    if rv is not None and rv>=0:
-        score+=8*min(1,rv/2); checks+=1
-    # Volume/OI ratio is a crude activity proxy, NOT unusual options order flow.
-    if vr is not None and vr>=0:
-        score+=3*min(1,vr/1); checks+=1
-    # Sector RS is assessed in the proposed trade direction.
-    if rel is not None:
-        side=1 if candidate.get("option_type")=="CALL" else -1
-        score+=5*min(1,max(0,side*rel)/3); checks+=1
-    if not checks:
-        # Preserve existing ranking on missing data: no fake bonus or penalty.
-        final=base
-    else:
-        # Scale data bonus onto the same 0-100 range, but keep missing checks
-        # visible; do NOT represent these values as calibrated probabilities.
-        final=max(0,min(100,score))
+    # Each absent metric receives the *structural baseline* rather than an
+    # artificial zero or perfect score. Verified observations adjust ranking.
+    def contribution(weight, value):
+        return weight*(base/100 if value is None else min(1,max(0,value)))
+    if vol is not None:checks+=1
+    score+=contribution(7,None if vol is None else vol/500)
+    if oi is not None:checks+=1
+    score+=contribution(7,None if oi is None else oi/1000)
+    if rv is not None and rv>=0:checks+=1
+    score+=contribution(8,None if rv is None or rv<0 else rv/2)
+    if vr is not None and vr>=0:checks+=1
+    score+=contribution(3,None if vr is None or vr<0 else vr)
+    if rel is not None:checks+=1
+    side=1 if candidate.get("option_type")=="CALL" else -1
+    score+=contribution(5,None if rel is None else max(0,side*rel)/3)
+    final=max(0,min(100,score))
     output=dict(candidate)
     risk=dict(output.get("risk_snapshot") or {})
     risk["ranking_evidence"]={
@@ -110,7 +105,7 @@ def rank_with_evidence(candidate, activity_data=None, sector_data=None):
         "expected_evidence_items":5,
         "activity":a,
         "sector_relative_strength":rs,
-        "score_method":"70% structural + up to 30% measured volume/OI/activity/sector components; uncalibrated heuristic",
+        "score_method":"70% base + 30% volume/OI/unusual-volume/sector evidence (missing metrics carry base-neutral estimate); uncalibrated heuristic",
         "score_is_probability":False}
     output["risk_snapshot"]=risk
     output["score"]=round(final,3)
