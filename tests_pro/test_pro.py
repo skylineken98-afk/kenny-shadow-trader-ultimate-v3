@@ -52,7 +52,7 @@ def test_checkout_uses_server_price_and_identity_not_browser_values(monkeypatch)
   if args[0]=='GET':return {'active':True,'recurring':{'interval':'month','interval_count':1}}
   seen.append(kw);return {'id':'cs_test','url':'https://checkout.stripe.com/test'}
  monkeypatch.setattr('kst_pro.membership.stripe_call',stripe)
- env={'STRIPE_MONTHLY_PRICE_ID':'price_real','KST_SITE_URL':'https://kst.example','STRIPE_SECRET_KEY':'test'}
+ env={'STRIPE_MONTHLY_PRICE_ID':'price_real','KST_SITE_URL':'https://kst.example','STRIPE_SECRET_KEY':'test','STRIPE_WEBHOOK_SECRET':'test-signed'}
  checkout(db,A,{'request_id':str(uuid.uuid4()),'user_id':B,'price':'price_forged'},env)
  assert seen[0]['data']['client_reference_id']==A and seen[0]['data']['line_items[0][price]']=='price_real'
  assert db.data['kst_billing_sessions'][0]['user_id']==A
