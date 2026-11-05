@@ -4,6 +4,7 @@ from datetime import datetime,timezone,timedelta
 from urllib.parse import urlsplit
 import requests
 from kst_options.engine import parse
+from .intro_offer import code_from_input,intro_coupon,intro_checkout_data
 
 def is_admin(user,env):return user in [x.strip() for x in env.get('KST_ADMIN_USER_IDS','').split(',') if x.strip()]
 
@@ -18,7 +19,7 @@ def entitlement(row,now=None):
 
 def status(store,user,env):
  rows=store.rows('kst_memberships',user_id='eq.'+user,limit=1);row=rows[0] if rows else {}
- return {'user_id':user,'pro':entitlement(row) or is_admin(user,env),'admin':is_admin(user,env),'enforced':env.get('MEMBERSHIP_ENFORCED','false')=='true','paid_until':row.get('paid_until'),'pass_until':row.get('pass_until'),'lifetime_pass':bool(row.get('pass_lifetime')),'checkout_available':bool(env.get('STRIPE_SECRET_KEY') and env.get('STRIPE_MONTHLY_PRICE_ID') and env.get('KST_SITE_URL'))}
+ return {'user_id':user,'pro':entitlement(row) or is_admin(user,env),'admin':is_admin(user,env),'enforced':env.get('MEMBERSHIP_ENFORCED','false')=='true','paid_until':row.get('paid_until'),'pass_until':row.get('pass_until'),'lifetime_pass':bool(row.get('pass_lifetime')),'checkout_available':bool(env.get('STRIPE_SECRET_KEY') and env.get('STRIPE_MONTHLY_PRICE_ID') and env.get('KST_SITE_URL') and env.get('STRIPE_WEBHOOK_SECRET')),'intro_offer':'ENZO or MAYVI: 30 days free, then 50% through first 12 months from signup; one per account'}
 
 def require_access(store,user,env):
  if env.get('MEMBERSHIP_ENFORCED','false')=='true' and not status(store,user,env)['pro']:raise PermissionError('This feature requires Pro membership or an active free pass')
@@ -38,14 +39,36 @@ def checkout(store,user,body,env):
  ident=str(uuid.UUID(str(body.get('request_id'))));price=env.get('STRIPE_MONTHLY_PRICE_ID','')
  site=env.get('KST_SITE_URL','').rstrip('/');u=urlsplit(site)
  if u.scheme!='https' or not u.hostname or u.username or u.password or u.query or u.fragment or u.path not in ('','/'):raise ValueError('Configure KST_SITE_URL as the production HTTPS origin')
+ if not env.get('STRIPE_WEBHOOK_SECRET'):raise ValueError('Stripe webhook signing is required before checkout can accept money')
  if not re.fullmatch(r'price_[A-Za-z0-9]+',price):raise ValueError('Configure the monthly Stripe price')
  price_info=stripe_call('GET','prices/'+price,env)
  if not price_info.get('active') or (price_info.get('recurring') or {}).get('interval')!='month' or (price_info.get('recurring') or {}).get('interval_count',1)!=1:raise ValueError('Configure an active monthly recurring Stripe price')
- result=stripe_call('POST','checkout/sessions',env,data={'mode':'subscription','line_items[0][price]':price,'line_items[0][quantity]':'1','client_reference_id':user,'metadata[kst_user]':user,'subscription_data[metadata][kst_user]':user,'success_url':site+'/#account','cancel_url':site+'/#account'},idempotency='kst-monthly-'+user+'-'+str(int(time.time()//1800)))
- url=result.get('url','');p=urlsplit(url)
- if p.scheme!='https' or p.hostname!='checkout.stripe.com':raise RuntimeError('Unexpected payment destination')
- store.insert('kst_billing_sessions',{'id':result['id'],'user_id':user,'plan':'monthly'},ignore=True)
- return {'url':url}
+ code=code_from_input(body.get('promo_code'))
+ coupon=intro_coupon(env,stripe_call) if code else None
+ reserved=False
+ if code:
+  reserved=bool(store.call('POST','rpc/kst_reserve_intro',data={'p_user':user,'p_code':code}))
+  if not reserved:raise ValueError('An introductory offer is already used or pending for this account. Only one ENZO or MAYVI code is allowed.')
+ try:
+  checkout_data={
+   'mode':'subscription','line_items[0][price]':price,'line_items[0][quantity]':'1',
+   'client_reference_id':user,'metadata[kst_user]':user,
+   'subscription_data[metadata][kst_user]':user,
+   'success_url':site+'/#account','cancel_url':site+'/#account',
+   # Short expiry matches the database 40-minute reservation lock.
+   'expires_at':str(int(time.time())+31*60)}
+  if code:checkout_data.update(intro_checkout_data(code,coupon))
+  result=stripe_call('POST','checkout/sessions',env,data=checkout_data,
+    idempotency='kst-checkout-'+user+'-'+ident)
+  url=result.get('url','');p=urlsplit(url)
+  if p.scheme!='https' or p.hostname!='checkout.stripe.com':raise RuntimeError('Unexpected payment destination')
+  store.insert('kst_billing_sessions',{'id':result['id'],'user_id':user,'plan':'monthly','intro_code':code},ignore=True)
+  return {'url':url,'intro_code':code,'intro_offer_applied':bool(code)}
+ except Exception:
+  if reserved:
+   try:store.call('POST','rpc/kst_release_intro',data={'p_user':user,'p_code':code})
+   except Exception:pass
+  raise
 
 def portal(store,user,env):
  rows=store.rows('kst_memberships',user_id='eq.'+user,limit=1)
@@ -89,6 +112,10 @@ def webhook(store,raw,signature,env,now=None):
  until=datetime.fromtimestamp(end,timezone.utc).isoformat() if allowed and current.get('status') in ('active','trialing') and end>now else None
  # Gift passes remain independent of subscription cancellation/failure.
  store.call('POST','rpc/kst_apply_billing',data={'p_event':event['id'],'p_user':user,'p_created':int(event['created']),'p_until':until,'p_lifetime':False,'p_customer':current.get('customer'),'p_subscription':sub_id})
+ # Mark promo redeemed only after a Stripe-signed completed checkout
+ # verified against server-recorded session and subscription ownership.
+ if kind in ('checkout.session.completed','checkout.session.async_payment_succeeded') and saved[0].get('intro_code') and current.get('status') in ('active','trialing'):
+  store.call('POST','rpc/kst_redeem_intro',data={'p_user':user,'p_code':saved[0]['intro_code'],'p_session':obj['id']})
  return {'received':True}
 
 def grant(store,actor,body,env):
