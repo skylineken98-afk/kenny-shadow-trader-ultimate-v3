@@ -22,10 +22,10 @@ def request(url,headers,payload,emit,timeout=55):
   from .service import ApiError
   try:code=json.loads(exc.read(16384)).get('error',{}).get('code')
   except (ValueError,AttributeError):code=None
-  if exc.code==401:raise ApiError(503,'OpenAI authorization failed; check the Railway API key and project access') from None
-  if code=='insufficient_quota':raise ApiError(503,'OpenAI API credits or project quota are exhausted. The site owner must check API billing.') from None
+  if exc.code==401:raise ApiError(503,'Your OpenAI API key was rejected; check your API project access') from None
+  if code=='insufficient_quota':raise ApiError(503,'Your OpenAI API project has insufficient credits or quota. Check your own provider billing.') from None
   if exc.code==429:raise ApiError(429,'OpenAI request limit reached. Please wait before retrying.') from None
-  if exc.code in (400,403,404):raise ApiError(503,'OpenAI model or project access failed (HTTP '+str(exc.code)+'). The site owner must check provider configuration.') from None
+  if exc.code in (400,403,404):raise ApiError(503,'OpenAI model or project access failed (HTTP '+str(exc.code)+'). Check your provider API project.') from None
   raise ApiError(502,'OpenAI returned HTTP '+str(exc.code)+'. Please check history before retrying.') from None
  with response:
   def lines():
