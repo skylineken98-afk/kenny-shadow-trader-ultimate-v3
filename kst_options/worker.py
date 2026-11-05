@@ -4,6 +4,7 @@ from datetime import timedelta
 from .engine import utcnow,stamp,parse,NY,BUDGETS,candidate,deadline,mark,num,requested_choices,context_label,affordable
 from .store import Store
 from .provider import Provider
+from .universe import universe,diverse_choices
 from .learning import active,train
 log=logging.getLogger('kst_options')
 def track(store,provider,now):
@@ -36,7 +37,7 @@ def publish_request_choice(store,c,req,now,fee,version):
 def scan(store,provider,now):
  started=now
  weights,version=active(store);day=now.astimezone(NY).date();candidates={};errors=0
- symbols=list(dict.fromkeys(x.strip().upper() for x in os.getenv('OPTIONS_SYMBOLS','SPY,QQQ,IWM').split(',') if x.strip()))
+ symbols=universe()
  # No silent fallback from OPRA to indicative. Index coverage is provider dependent.
  for symbol in symbols:
   for lo,hi in [(day,day+timedelta(days=45)),(day+timedelta(days=270),day+timedelta(days=730))]:
@@ -66,7 +67,7 @@ def scan(store,provider,now):
   offset+=500
  for cat in ('0DTE','Swings','LEAPS'):
   for budget in BUDGETS:
-   choices=sorted((c for c in candidates.values() if c['quality_label']=='QUALIFIED' and c['category']==cat and affordable(c['entry_ask'],budget,fee)),key=lambda c:(-c['score'],c['contract']))[:3]
+   choices=diverse_choices((c for c in candidates.values() if c['quality_label']=='QUALIFIED' and c['category']==cat and affordable(c['entry_ask'],budget,fee)),3)
    for c in choices:
     if (c['contract'],cat,float(budget)) in existing:continue
     rows.append(dict(c,id=str(uuid.uuid4()),created_at=stamp(now),batch_id=batch,budget=budget,fee_estimate=fee,model_version=version,due_at=stamp(deadline(c,now)),state='OPEN'))
