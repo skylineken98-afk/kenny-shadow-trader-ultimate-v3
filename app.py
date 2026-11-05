@@ -265,3 +265,8 @@ def show_scanner_contract_suggestions():
 
 with tabs[12]:
     show_scanner_contract_suggestions()
+
+# The existing Request a Signal tab also displays the same options-aware
+# scanner summary beneath its requested results.
+with tabs[6]:
+    show_scanner_contract_suggestions()
