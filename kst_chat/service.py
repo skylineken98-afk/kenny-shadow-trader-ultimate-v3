@@ -193,7 +193,7 @@ def handle(method,path,body,user,store,env,http=http_json,emit=None,ai_key=None)
   store.insert('kst_chat_turns',{'id':turn_id,'conversation_id':conv['id'],'user_id':user,'user_text':message,'status':'PENDING','attachments':attachments})
   try:
    text=complete(provider,key,build_input(history,memory,recalled,context,message,images),
-      INSTRUCTIONS+'\\n'+CHART_INSTRUCTIONS,
+      INSTRUCTIONS+'\n'+CHART_INSTRUCTIONS,
       max_tokens=int(env.get('CHAT_MAX_OUTPUT_TOKENS','1500')),
       emit=emit,openai_http=http)
    store.call('PATCH','kst_chat_turns',{'id':'eq.'+turn_id,'user_id':'eq.'+user},{'assistant_text':text,'status':'COMPLETE','sources':sources,'completed_at':datetime.now(timezone.utc).isoformat()})
