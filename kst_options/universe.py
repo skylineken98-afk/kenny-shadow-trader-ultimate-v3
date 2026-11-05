@@ -17,6 +17,25 @@ DEFAULT_SYMBOLS=(
 )
 MAX_SYMBOLS=60
 
+# Index options have independent coverage. Keep SPX out of the rotating
+# stock/ETF universe: an explicit empty OPTIONS_SYMBOLS must not silently
+# disable or impersonate index monitoring.
+PRIORITY_INDEX_SYMBOLS=("SPX",)
+
+def priority_index_symbols(enabled=None):
+    """Always attempt SPX once per scan when explicitly enabled.
+
+    Index-option entitlements and the underlying cash-index feed must be
+    verified separately; an attempted chain is not a validated signal.
+    """
+    if enabled is None: enabled=os.getenv("SPX_INDEX_SCAN_ENABLED","true")
+    return list(PRIORITY_INDEX_SYMBOLS) if str(enabled).strip().lower() in ("true","1","yes") else []
+
+def scan_symbols(rotating, priority=None):
+    """Include priority indexes exactly once, regardless of rotation/config."""
+    if priority is None: priority=priority_index_symbols()
+    return list(dict.fromkeys([*priority,*rotating]))
+
 def universe(raw=None):
     """Honor explicit deployment configuration; cap cost and skip bad symbols."""
     if raw is None:raw=os.getenv("OPTIONS_SYMBOLS")
