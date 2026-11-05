@@ -20,7 +20,7 @@ MAX_SYMBOLS=60
 def universe(raw=None):
     """Honor explicit deployment configuration; cap cost and skip bad symbols."""
     if raw is None:raw=os.getenv("OPTIONS_SYMBOLS")
-    if raw is None: return list(DEFAULT_SYMBOLS)
+    if not raw or not raw.strip(): return list(DEFAULT_SYMBOLS)
     chosen=[]
     for item in raw.split(","):
         symbol=item.strip().upper()
