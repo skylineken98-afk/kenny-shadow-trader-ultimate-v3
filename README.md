@@ -1,3 +1,5 @@
+> Current build: r5. Read RELEASE_R5.md before deploying. Apply all five listed migrations and select the correct per-service start command. The execution service is separate and disabled by default.
+
 # Kenny Shadow Trader Ultimate V3 — Standalone Research Beta
 
 **Start with [`V3_START_HERE.md`](V3_START_HERE.md).** This is a complete, uploadable GitHub repository assembled from the original uploaded Ultimate V2 and separate upgrade, without depending on the V2 GitHub repository.

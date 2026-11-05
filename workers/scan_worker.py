@@ -11,6 +11,9 @@ def cycle():
             r=insert('ultimate_signals',row);logging.info('%s %s %s',sym,s['status'],r.get('ok'))
         except Exception:logging.exception('scan failure %s',sym)
 if __name__=='__main__':
+    import threading
+    from kst_pro.ops import heartbeat_loop
+    threading.Thread(target=heartbeat_loop,args=('scanner',),daemon=True).start()
     while True:
         try:cycle()
         except Exception:logging.exception('scan cycle failed')

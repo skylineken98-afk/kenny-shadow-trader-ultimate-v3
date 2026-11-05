@@ -1,0 +1,1 @@
+{"$schema":"https://railway.com/railway.schema.json","build":{"builder":"NIXPACKS"},"deploy":{"startCommand":"python -m kst_chat.server","restartPolicyType":"ON_FAILURE","restartPolicyMaxRetries":10,"healthcheckPath":"/health"}}

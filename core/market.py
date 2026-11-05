@@ -6,7 +6,7 @@ def history(symbol,period='60d',interval='1h'):
     if df is None or df.empty: return pd.DataFrame()
     return df.dropna(subset=['Close']).copy()
 
-def levels(df):
+def levels(df,interval_minutes=None):
     if df.empty or len(df)<30: return None
     close=df['Close'].astype(float)
     ema20=close.ewm(span=20,adjust=False).mean()
@@ -21,7 +21,15 @@ def levels(df):
     high=float(df['High'].tail(40).max());low=float(df['Low'].tail(40).min())
     bull=price>float(ema20.iloc[-1])>float(ema50.iloc[-1]);bear=price<float(ema20.iloc[-1])<float(ema50.iloc[-1])
     trend='BULLISH' if bull else 'BEARISH' if bear else 'NEUTRAL'
-    return {'price':price,'ema20':float(ema20.iloc[-1]),'ema50':float(ema50.iloc[-1]),'ema200':float(ema200.iloc[-1]),'atr':atr,'rvol':rvol,'support':low,'resistance':high,'trend':trend,'volume':float(vol.iloc[-1])}
+    candle_evidence=None
+    if interval_minutes:
+        from datetime import datetime,timezone
+        from kst_options.candles import review_candles
+        try:
+            rows=[dict(time=t.isoformat(),open=r.Open,high=r.High,low=r.Low,close=r.Close) for t,r in df.tail(50).iterrows()]
+            candle_evidence=review_candles(rows,datetime.now(timezone.utc),interval_minutes)
+        except (ValueError,TypeError,AttributeError):pass
+    return {'candle_evidence':candle_evidence,'price':price,'ema20':float(ema20.iloc[-1]),'ema50':float(ema50.iloc[-1]),'ema200':float(ema200.iloc[-1]),'atr':atr,'rvol':rvol,'support':low,'resistance':high,'trend':trend,'volume':float(vol.iloc[-1])}
 
 def confluence(symbol):
     frames={}
@@ -30,7 +38,7 @@ def confluence(symbol):
             df=history(symbol,period,interval)
             if key=='4h' and not df.empty:
                 df=df.resample('4h').agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'}).dropna()
-            frames[key]=levels(df)
+            frames[key]=levels(df,{'4h':240,'1h':60,'5m':5}[key])
         except Exception: frames[key]=None
     if any(v is None for v in frames.values()):return {'symbol':symbol,'status':'INSUFFICIENT_DATA','frames':frames}
     directions=[frames[k]['trend'] for k in ('4h','1h','5m')]
