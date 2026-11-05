@@ -40,7 +40,8 @@ def _symbols(message):
 def _wants_trade_research(message):
     q=message.lower()
     return any(word in q for word in ("swing","trade idea","trades","setups","option",
-        "best put","best call","buy","short","bullish","bearish","momentum","volume","uptrend"))
+        "best put","best call","buy","short","bullish","bearish","momentum","volume","uptrend",
+        "stocks","recommend","sector","rotation","money flowing","opportunities","scanner"))
 
 def market_research(store, message, now=None):
     """Answer-supporting, non-user-private market snapshots plus provenance.
@@ -62,7 +63,7 @@ def market_research(store, message, now=None):
             "created_at,underlying,contract,option_type,strike,expiration,category,"
             "score,quality_label,context_label,entry_ask,entry_bid,quote_at,feed,state"
         ),category="eq.Swings" if "swing" in message.lower() else "in.(Swings,0DTE,LEAPS)",
-            order="created_at.desc",limit=80,**params)
+            order="created_at.desc",limit=500,**params)
         if symbols: opts=[x for x in opts if x.get("underlying") in symbols]
         unique={}
         for row in opts:
@@ -87,7 +88,21 @@ def market_research(store, message, now=None):
             fresh=age is not None and age<=15
             return (not fresh, not aligned, -(float(x.get("score") or 0)))
         ranking.sort(key=rank)
+        # For broad discovery, do not allow one ETF to monopolize the answer.
+        # Named-symbol questions can still surface several contracts on that symbol.
+        if not symbols:
+            diverse=[];used=set();other=[]
+            for item in ranking:
+                ticker=item.get("underlying")
+                if ticker and ticker not in used:
+                    diverse.append(item);used.add(ticker)
+                else:other.append(item)
+            ranking=diverse+other
         result["contract_candidates"]=ranking[:8]
+        result["coverage"]={"unique_option_underlyings":len(set(x.get("underlying") for x in unique.values())),
+                            "sampled_contract_rows":len(opts),
+                            "quotes_are_volume_verified":False,
+                            "note":"Contract rank uses quality/alignment, not confirmed option volume; sampled DB records are not the entire stock market."}
         for i,row in enumerate(result["contract_candidates"],1):
             row["reference"]="KOPT"+str(i)
             refs.append({"id":row["reference"],"label":row["contract"],
@@ -97,7 +112,7 @@ def market_research(store, message, now=None):
     try:
         setup_params={"symbol":"in.("+",".join(symbols)+")"} if symbols else {}
         setups=store.rows("ultimate_signals",select="created_at,symbol,status,side,entry,stop,target,details",
-                          order="created_at.desc",limit=75,**setup_params)
+                          order="created_at.desc",limit=300,**setup_params)
         if symbols:setups=[r for r in setups if r.get("symbol") in symbols]
         unique={}
         for row in setups:
