@@ -61,7 +61,7 @@ def market_research(store, message, now=None):
         params={"underlying":"in.("+",".join(symbols)+")"} if symbols else {}
         opts=store.rows("kst_option_signals",select=(
             "created_at,underlying,contract,option_type,strike,expiration,category,"
-            "score,quality_label,context_label,entry_ask,entry_bid,quote_at,feed,state"
+            "score,quality_label,context_label,entry_ask,entry_bid,quote_at,feed,state,risk_snapshot"
         ),category="eq.Swings" if "swing" in message.lower() else "in.(Swings,0DTE,LEAPS)",
             order="created_at.desc",limit=500,**params)
         if symbols: opts=[x for x in opts if x.get("underlying") in symbols]
@@ -77,6 +77,18 @@ def market_research(store, message, now=None):
                 "underlying","contract","option_type","strike","expiration",
                 "category","score","quality_label","context_label",
                 "entry_ask","entry_bid","quote_at","feed","state","created_at")}
+            evidence=(row.get("risk_snapshot") or {}).get("ranking_evidence") or {}
+            measures=evidence.get("activity") or {}
+            sector=evidence.get("sector_relative_strength") or {}
+            item["measured_option_volume"]=measures.get("contract_volume")
+            item["open_interest"]=measures.get("open_interest")
+            item["relative_contract_volume"]=measures.get("relative_contract_volume")
+            item["volume_to_oi_ratio"]=measures.get("volume_oi_ratio")
+            item["unusual_volume_proxy"]=measures.get("unusual_volume_proxy")
+            item["sector_etf"]=sector.get("sector_etf")
+            item["sector_relative_strength_pct_points"]=sector.get("relative_strength_pct_points")
+            item["evidence_items_measured"]=evidence.get("measured_evidence_items",0)
+            item["ranking_method"]=evidence.get("score_method","structural only")
             item.update(quote_age_minutes=age,quote_status=quote_status,
                         broker_executable_quote_verified=False,
                         score_is_win_probability=False)
