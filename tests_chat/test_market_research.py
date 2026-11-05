@@ -42,6 +42,21 @@ class MarketResearchTest(unittest.TestCase):
         self.assertEqual(candidates[1]["quote_status"],"STALE")
         self.assertEqual(context["technical_setups"][0]["side"],"BEARISH")
         self.assertTrue(any(row["id"]=="KOPT1" for row in sources))
+    def test_broad_recommendations_diversify_underlyings(self):
+        class Broad(Store):
+            def rows(self,table,**kwargs):
+                if table=="kst_option_signals":
+                    names=["IWM","IWM","IWM","IWM","IWM","NVDA","AAPL","XOM"]
+                    return [dict(created_at=ts(i),underlying=name,
+                        contract=name+"-"+str(i),option_type="PUT",score=99-i,
+                        context_label="BEARISH_SETUP_ALIGNED",feed="indicative",
+                        quote_at=ts(1),entry_ask=2) for i,name in enumerate(names)]
+                return super().rows(table,**kwargs)
+        context,_=market_research(Broad(),"best swing trades",NOW)
+        names=[x["underlying"] for x in context["contract_candidates"][:4]]
+        self.assertEqual(names,["IWM","NVDA","AAPL","XOM"])
+        self.assertEqual(context["coverage"]["unique_option_underlyings"],4)
+        self.assertFalse(context["coverage"]["quotes_are_volume_verified"])
     def test_explicit_symbol_filters(self):
         c,_=market_research(Store(),"Apple bullish swing idea",NOW)
         self.assertEqual(c["contract_candidates"],[])
