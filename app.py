@@ -18,7 +18,7 @@ st.title('⚡ Kenny Shadow Trader Ultimate V3 · Options / Stocks / Crypto')
 st.caption('BETA • Rules-based market scan • Paper simulations only • Live orders permanently disabled in this build')
 if not password:st.warning('APP_PASSWORD is not configured. Set it before exposing the dashboard publicly; service-role credentials must remain server-side.')
 if client() is None:st.warning('Supabase is not configured. Live market exploration works; persistence, news history and paper ledger require Supabase + SQL setup.')
-tabs=st.tabs(['Dashboard','0DTE','Swings','LEAPS','Stocks','Crypto','Request a Signal','Market Sentiment','AI News','Paper Trading','Risk & System','Money Flow & Sector Rotation'])
+tabs=st.tabs(['Dashboard','0DTE','Swings','LEAPS','Stocks','Crypto','Request a Signal','Market Sentiment','AI News','Paper Trading','Risk & System','Money Flow & Sector Rotation','Scanner'])
 def show_chart(symbol,mode,plan=None):
     fig,z=make_chart(symbol,mode,plan)
     if fig is None:
@@ -231,3 +231,37 @@ with tabs[11]:
         st.warning('No verified sector leaderboard available from the provider. No placeholder rankings were generated.')
     for notice in sector_notices:
         st.caption(notice)
+
+
+# Scanner suggestions are based on the latest saved signal per ticker, not
+# invented quotes or broker orders. Both scanner views use the same read-only
+# database records, including the actual cost/quote timestamp.
+def show_scanner_contract_suggestions():
+    from core.scanner_contract_suggestions import match_signal_contracts
+    from datetime import datetime,timezone
+    st.subheader('🎯 Scanner signals — best eligible contracts under $500')
+    st.caption('One best direction-aligned, qualified contract per fresh bullish/bearish setup. $500 MAX ask × 100; scanner scores are not win odds. No options orders are sent.')
+    signals=fetch('ultimate_signals',500)
+    options=fetch('kst_option_signals',1000)
+    if not signals:
+        st.info('No saved scanner signals available. No contracts invented.')
+        return
+    matched=match_signal_contracts(signals,options,now=datetime.now(timezone.utc),max_cost=500)
+    for row in matched:
+        label=f"{row['symbol']} · {row['side'] or 'WAIT'} · {row['status'] or 'UNKNOWN'}"
+        with st.expander(label,expanded=bool(row['suggestion'])):
+            st.caption(f"Signal at {row['signal_at'] or 'unknown'} · Underlying entry/stop/target: {row['entry']} / {row['stop']} / {row['target']}")
+            c=row['suggestion']
+            if c is None:
+                st.info(row['reason']+'; check again after the next options scan.')
+                continue
+            a,b,d=st.columns(3)
+            a.metric('Option contract',str(c['contract']))
+            b.metric('Indicative one-contract ask cost',f"${row['premium_cost']:,.2f}")
+            d.metric('Research rank (not odds)',f"{float(c['score']):.1f}/100")
+            st.write(f"**{c['option_type']}** · Strike ${c['strike']} · Expires {c['expiration']}")
+            st.caption(f"Bid/ask: ${float(c['entry_bid']):.2f} / ${float(c['entry_ask']):.2f} · Quote time: {c['quote_at']} · Feed: {c.get('feed','unknown')} · Verify broker quote, volume, open interest, and spread before considering a trade.")
+            st.caption('Underlying signal levels are NOT option-premium stops or profit targets. Quotes may be indicative/delayed and not executable.')
+
+with tabs[12]:
+    show_scanner_contract_suggestions()
