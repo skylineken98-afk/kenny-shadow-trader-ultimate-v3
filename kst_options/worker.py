@@ -4,7 +4,7 @@ from datetime import timedelta
 from .engine import utcnow,stamp,parse,NY,BUDGETS,candidate,deadline,mark,num,requested_choices,context_label,affordable
 from .store import Store
 from .provider import Provider
-from .universe import universe,diverse_choices,rotating_batch,enrichment_shortlist
+from .universe import universe,diverse_choices,rotating_batch,enrichment_shortlist,scan_symbols,priority_index_symbols
 from .evidence_ranking import activity,rank_with_evidence,sector_returns
 from .learning import active,train
 log=logging.getLogger('kst_options')
@@ -40,15 +40,27 @@ def scan(store,provider,now):
  weights,version=active(store);day=now.astimezone(NY).date();candidates={};errors=0
  all_symbols=universe()
  cadence=max(300,int(os.getenv('OPTIONS_SCAN_SECONDS','300')))
- symbols=rotating_batch(all_symbols,started,int(os.getenv('OPTIONS_UNIVERSE_BATCH','12')),cadence)
- # No silent fallback from OPRA to indicative. Index coverage is provider dependent.
+ rotating=rotating_batch(all_symbols,started,int(os.getenv('OPTIONS_UNIVERSE_BATCH','12')),cadence)
+ priority=priority_index_symbols()
+ symbols=scan_symbols(rotating,priority)
+ # SPX is attempted on every scan independently of the rotating stock basket.
+ # No silent feed fallback: unavailable index-chain quotes are never invented.
+ spx_contracts=0
  for symbol in symbols:
-  for lo,hi in [(day,day+timedelta(days=45)),(day+timedelta(days=270),day+timedelta(days=730))]:
+  windows=[(day,day+timedelta(days=7))] if symbol=='SPX' else [(day,day+timedelta(days=45)),(day+timedelta(days=270),day+timedelta(days=730))]
+  for lo,hi in windows:
    try:
     for contract,snapshot in provider.chain(symbol,lo,hi):
      quote_now=utcnow()
      c=candidate(contract,snapshot,quote_now,provider.feed,weights) or candidate(contract,snapshot,quote_now,provider.feed,weights,relaxed=True)
-     if c:candidates[contract]=c
+     if c:
+      if symbol=='SPX':
+       # A real option quote alone does not verify the underlying SPX index
+       # price or 1H/15M/1M signals. Do not publish it as an actionable setup.
+       c['quality_label']='WATCHLIST'
+       c['context_label']='SPX_INDEX_REFERENCE_UNAVAILABLE'
+       spx_contracts+=1
+      candidates[contract]=c
    except Exception as exc:errors+=1;log.warning('Chain %s: %s; HTTP %s',symbol,type(exc).__name__,getattr(exc,'status_code','unavailable'))
  now=utcnow()
  candidates={k:c for k,c in candidates.items() if 0<=(now-parse(c['quote_at'])).total_seconds()<=300}
@@ -109,7 +121,8 @@ def scan(store,provider,now):
   message=f'{len(published)} fresh contracts found; '+('three ranked ideas returned.' if len(published)==3 else 'fewer than three valid quotes available; no contracts invented.')
   if errors:message+=' Some chain requests failed; results are incomplete.'
   store.patch('kst_signal_requests',req['id'],{'status':'DONE','completed_at':stamp(utcnow()),'results':published,'message':message})
- store.health('DEGRADED' if errors else 'OK',f'{len(symbols)}/{len(all_symbols)} symbols scanned this cycle; {len(candidates)} qualifying contracts; {len(rows)} new research records; {errors} failed chain requests. Feed: {provider.feed}. No orders submitted.')
+ spx_note=('SPX index options scanned as non-actionable watchlist; verified cash-index feed and structure triggers not connected.' if spx_contracts else 'SPX index chain unavailable or no fresh eligible quotes; no SPX signals fabricated.') if priority else 'SPX index scan disabled by configuration.'
+ store.health('DEGRADED' if errors or priority else 'OK',f'{len(rotating)}/{len(all_symbols)} rotating symbols plus {len(priority)} priority indexes attempted; {len(candidates)} quote-qualified research candidates; {len(rows)} new research records; {errors} failed chain requests. {spx_note} Feed: {provider.feed}. No orders submitted.')
 def run():
  store=Store();provider=None;last_scan=0;last_news=0;last_proxy=0;last_stocks=0
  while True:
