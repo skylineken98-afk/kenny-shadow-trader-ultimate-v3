@@ -20,7 +20,7 @@ def entitlement(row,now=None):
 
 def status(store,user,env):
  rows=store.rows('kst_memberships',user_id='eq.'+user,limit=1);row=rows[0] if rows else {}
- return {'user_id':user,'pro':entitlement(row) or is_admin(user,env),'admin':is_admin(user,env),'enforced':env.get('MEMBERSHIP_ENFORCED','false')=='true','paid_until':row.get('paid_until'),'pass_until':row.get('pass_until'),'lifetime_pass':bool(row.get('pass_lifetime')),'checkout_available':bool(env.get('STRIPE_SECRET_KEY') and env.get('STRIPE_MONTHLY_PRICE_ID') and env.get('KST_SITE_URL') and env.get('STRIPE_WEBHOOK_SECRET')),'intro_offer':'ENZO or MAYVI: 30 days free, then 50% through first 12 months from signup; one per account'}
+ return {'user_id':user,'pro':entitlement(row) or is_admin(user,env),'admin':is_admin(user,env),'enforced':env.get('MEMBERSHIP_ENFORCED','false')=='true','paid_until':row.get('paid_until'),'pass_until':row.get('pass_until'),'lifetime_pass':bool(row.get('pass_lifetime')),'checkout_available':bool(env.get('STRIPE_SECRET_KEY') and env.get('STRIPE_MONTHLY_PRICE_ID') and env.get('STRIPE_YEAR_TWO_PRICE_ID') and env.get('KST_SITE_URL') and env.get('STRIPE_WEBHOOK_SECRET') and env.get('KST_BILLING_PHASES_VERIFIED')=='true'),'intro_offer':'ENZO or MAYVI: 30 days free, then 50% through first 12 months from signup; one per account'}
 
 def require_access(store,user,env):
  if env.get('MEMBERSHIP_ENFORCED','false')=='true' and not status(store,user,env)['pro']:raise PermissionError('This feature requires Pro membership or an active free pass')
