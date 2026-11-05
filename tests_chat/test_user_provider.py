@@ -74,3 +74,15 @@ def test_paid_membership_gate_blocks_unpaid_key_owners():
  with pytest.raises(ApiError) as exc:
   handle("POST","/api/chat/message",request,U1,db,env,ai_key="sk-user-billed-credential")
  assert exc.value.status==403 and db.reserves==0
+
+def test_research_endpoints_do_not_allow_byok_paywall_bypass():
+ db=Store();env={**ENV,"MEMBERSHIP_ENFORCED":"true"}
+ for method,path,body in [
+   ("GET","/api/chat/suggestions",{}),
+   ("POST","/api/chat/market-refresh",{"symbol":"NVDA"}),
+   ("POST","/api/chat/ticker-search",{"query":"AAPL"}),
+   ("POST","/api/chat/history-search",{"query":"IWM"})]:
+  with pytest.raises(ApiError) as exc:
+   handle(method,path,body,U1,db,env)
+  assert exc.value.status==403
+ assert db.reserves==0
