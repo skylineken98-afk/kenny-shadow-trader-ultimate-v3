@@ -9,9 +9,9 @@ from urllib.request import Request,urlopen
 from urllib.error import HTTPError,URLError
 
 PROVIDERS={
-    "openai":("gpt-4.1-mini","https://api.openai.com/v1/responses"),
+    "openai":("gpt-5-mini","https://api.openai.com/v1/responses"),
     "anthropic":("claude-haiku-5-5","https://api.anthropic.com/v1/messages"),
-    "google":("gemini-2.5-flash","https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"),
+    "google":("gemini-3.8-flash","https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"),
 }
 # Fixed allowlist prevents attacker-chosen costly models or arbitrary endpoints.
 def provider_config(provider):
