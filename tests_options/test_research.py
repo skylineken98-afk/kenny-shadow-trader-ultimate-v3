@@ -71,7 +71,7 @@ def test_requested_top3_labels_fallbacks_and_never_invents_missing_data():
  assert len(requested_choices([strict,fallback],'0DTE',1000))==2
  assert requested_choices([strict],'0DTE',30)==[]
  assert requested_choices([strict,fallback],'0DTE',1000)[0]['quality_label']=='QUALIFIED'
- setup={'status':'SETUP','side':'BULLISH','created_at':stamp(NOW)}
+ setup={'status':'SETUP','side':'BULLISH','created_at':stamp(NOW),'details':{'frames':{'5m':{'bar_closed_at':stamp(NOW)}}}}
  assert context_label(strict,setup,NOW)=='BULLISH_SETUP_ALIGNED'
  assert context_label(fallback,setup,NOW)=='COUNTER_TREND_RESEARCH'
 def test_news_dedup_fields_dates_and_untrusted_links():

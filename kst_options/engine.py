@@ -31,7 +31,7 @@ def candidate(contract,snapshot,now,feed,weights=BASE,relaxed=False):
  except ValueError:return None
  local=now.astimezone(NY)
  if local.weekday()>4 or not (9*60+30<=local.hour*60+local.minute<16*60):return None
- cat=category(exp,now);q=quote(snapshot.get('latestQuote') or {},now)
+ cat=category(exp,now);q=quote(snapshot.get('latestQuote') or {},now,max_age=60)
  if cat is None or q is None:return None
  bid,ask,t=q
  if bid<=0 or ask*100>3000:return None
@@ -55,6 +55,22 @@ def mark(signal,q,now,fee=0):
  entry=float(signal['entry_ask']);pl=(bid-entry)*100-fee;ret=pl/(entry*100)
  oldmax=signal.get('max_return');oldmin=signal.get('min_return')
  result=dict(last_bid=bid,last_quote_at=stamp(t),estimated_pl=pl,estimated_return=ret,max_return=max(ret,oldmax if oldmax is not None else ret),min_return=min(ret,oldmin if oldmin is not None else ret),target_seen=bool(signal.get('target_seen')) or ret>=.5,stop_seen=bool(signal.get('stop_seen')) or ret<=-.3)
+ # First observed barrier is separate from the original horizon outcome.
+ # Polling cannot establish the path or fills between observations.
+ risk=dict(signal.get('risk_snapshot') or {})
+ barrier=dict(risk.get('observed_barrier') or {})
+ if not barrier and (signal.get('target_seen') or signal.get('stop_seen')):
+  barrier={'version':'sampled-v1','outcome':'PRIOR_ORDER_UNKNOWN',
+           'limitation':'Legacy barrier flags exist without first-crossing timestamps; audit saved marks'}
+  risk['observed_barrier']=barrier
+  result['risk_snapshot']=risk
+ if not barrier and t<=parse(signal['due_at']) and (ret>=.5 or ret<=-.3):
+  barrier={'version':'sampled-v1','outcome':'TARGET_FIRST_OBSERVED' if ret>=.5 else 'STOP_FIRST_OBSERVED',
+           'quote_at':stamp(t),'observed_return':ret,'bid':bid,
+           'previous_quote_at':signal.get('last_quote_at') or signal['quote_at'],
+           'limitation':'First sampled crossing only; intrapoll path and execution unverified'}
+  risk['observed_barrier']=barrier
+  result['risk_snapshot']=risk
  # Label only near-horizon executable quotes. No fabricated expiry settlement.
  if t>=parse(signal['due_at']):
   late=(t-parse(signal['due_at'])).total_seconds()
@@ -78,7 +94,12 @@ def context_label(contract,setup,now):
  try:
   age=(now-parse(setup['created_at'])).total_seconds()
  except (ValueError,TypeError,KeyError):return 'STRUCTURAL_ONLY'
- if not 0<=age<=5400:return 'STRUCTURAL_ONLY'
+ if not 0<=age<=300:return 'STRUCTURAL_ONLY'
+ # Processing time is not evidence that the underlying bars are current.
+ try:
+  closed=parse(setup['details']['frames']['5m']['bar_closed_at'])
+  if not 0<=(now-closed).total_seconds()<=600:return 'STRUCTURAL_ONLY'
+ except (KeyError,TypeError,ValueError):return 'STRUCTURAL_ONLY'
  side=setup.get('side')
  if (side=='BULLISH' and contract['option_type']=='CALL') or (side=='BEARISH' and contract['option_type']=='PUT'):return side+'_SETUP_ALIGNED'
  return 'COUNTER_TREND_RESEARCH'

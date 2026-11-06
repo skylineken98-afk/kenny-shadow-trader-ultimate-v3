@@ -32,13 +32,19 @@ def levels(df,interval_minutes=None):
     return {'candle_evidence':candle_evidence,'price':price,'ema20':float(ema20.iloc[-1]),'ema50':float(ema50.iloc[-1]),'ema200':float(ema200.iloc[-1]),'atr':atr,'rvol':rvol,'support':low,'resistance':high,'trend':trend,'volume':float(vol.iloc[-1])}
 
 def _trend_confluence(symbol):
+    from datetime import datetime, timezone
+    scan_now=datetime.now(timezone.utc)
     frames={}
     for key,period,interval in [('4h','180d','1h'),('1h','60d','1h'),('5m','5d','5m')]:
         try:
             df=history(symbol,period,interval)
             if key=='4h' and not df.empty:
                 df=df.resample('4h').agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'}).dropna()
-            frames[key]=levels(df,{'4h':240,'1h':60,'5m':5}[key])
+            minutes={'4h':240,'1h':60,'5m':5}[key]
+            df=df.loc[df.index+pd.Timedelta(minutes=minutes)<=pd.Timestamp(scan_now)]
+            frames[key]=levels(df,minutes)
+            if frames[key] is not None:
+                frames[key]['bar_closed_at']=(df.index[-1]+pd.Timedelta(minutes=minutes)).isoformat()
         except Exception: frames[key]=None
     if any(v is None for v in frames.values()):return {'symbol':symbol,'status':'INSUFFICIENT_DATA','frames':frames}
     directions=[frames[k]['trend'] for k in ('4h','1h','5m')]

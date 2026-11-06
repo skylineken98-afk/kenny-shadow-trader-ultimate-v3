@@ -65,7 +65,7 @@ def scan(store,provider,now):
  now=utcnow()
  candidates={k:c for k,c in candidates.items() if 0<=(now-parse(c['quote_at'])).total_seconds()<=300}
  for symbol in symbols:
-  setups=store.rows('ultimate_signals',symbol='eq.'+symbol,select='created_at,status,side',order='created_at.desc',limit=1)
+  setups=store.rows('ultimate_signals',symbol='eq.'+symbol,select='created_at,status,side,details',order='created_at.desc',limit=1)
   setup=setups[0] if setups else None
   for c in candidates.values():
    if c['underlying']==symbol:
@@ -106,6 +106,9 @@ def scan(store,provider,now):
              source='Alpaca option daily aggregates / contract metadata; feed and entitlements apply')
   updated=rank_with_evidence(c,a,sector_data.get(c['underlying']))
   candidates[sym]=updated
+ # Enrichment can take time. Never publish an entry whose quote has aged out.
+ now=utcnow()
+ candidates={k:c for k,c in candidates.items() if 0<=(now-parse(c['quote_at'])).total_seconds()<=60}
  fee=num(os.getenv('OPTIONS_ROUND_TRIP_FEE','0'))
  if fee is None or fee<0:raise ValueError('Invalid fee estimate')
  batch=str(uuid.uuid4());rows=[]
