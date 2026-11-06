@@ -31,7 +31,7 @@ def levels(df,interval_minutes=None):
         except (ValueError,TypeError,AttributeError):pass
     return {'candle_evidence':candle_evidence,'price':price,'ema20':float(ema20.iloc[-1]),'ema50':float(ema50.iloc[-1]),'ema200':float(ema200.iloc[-1]),'atr':atr,'rvol':rvol,'support':low,'resistance':high,'trend':trend,'volume':float(vol.iloc[-1])}
 
-def confluence(symbol):
+def _trend_confluence(symbol):
     frames={}
     for key,period,interval in [('4h','180d','1h'),('1h','60d','1h'),('5m','5d','5m')]:
         try:
@@ -47,3 +47,29 @@ def confluence(symbol):
     stop=f['price']-1.5*f['atr'] if side=='BULLISH' else f['price']+1.5*f['atr'] if side=='BEARISH' else None
     target=f['price']+3*f['atr'] if side=='BULLISH' else f['price']-3*f['atr'] if side=='BEARISH' else None
     return {'symbol':symbol,'status':'SETUP' if aligned else 'WAIT','side':side,'frames':frames,'entry':f['price'] if aligned else None,'stop':stop,'target':target,'confidence_label':'RULE_BASED_ONLY'}
+
+
+def confluence(symbol):
+    """Prefer the confirmed 4h/15m sweep/BOS/FVG setup; retain trend setups."""
+    from datetime import datetime, timezone
+    from core.liquidity_fvg import liquidity_fvg_setup
+    now = datetime.now(timezone.utc)
+    try:
+        hourly = history(symbol, '60d', '1h')
+        # Drop forming source hours before aggregation. Require four source bars
+        # so partial session buckets never masquerade as complete 4h context.
+        hourly = hourly.loc[hourly.index + pd.Timedelta(hours=1) <= pd.Timestamp(now)]
+        groups = hourly.resample('4h')
+        context = groups.agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'})
+        context = context.loc[groups.Close.count() == 4].dropna()
+        setup = liquidity_fvg_setup(context, history(symbol, '5d', '15m'), now)
+        if setup['status'] == 'SETUP':
+            result = _trend_confluence(symbol)
+            result.update(setup)
+            result['symbol'] = symbol
+            return result
+    except (ValueError, TypeError, KeyError, AttributeError):
+        setup = {'status':'UNAVAILABLE', 'strategy':'LIQUIDITY_SWEEP_BOS_FVG'}
+    result = _trend_confluence(symbol)
+    result['liquidity_fvg'] = setup
+    return result
