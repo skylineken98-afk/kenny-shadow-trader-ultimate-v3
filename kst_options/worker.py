@@ -24,7 +24,7 @@ def track(store,provider,now):
    store.patch('kst_option_signals',s['id'],{'state':'UNRESOLVED','closed_at':stamp(now)});continue
   update=mark(s,quotes.get(s['contract'],{}),now,float(s.get('fee_estimate',fee)))
   if update:
-   store.insert('kst_option_marks',{'id':str(uuid.uuid4()),'signal_id':s['id'],'observed_at':stamp(now),'quote_at':update['last_quote_at'],'bid':update['last_bid'],'ask':quotes[s['contract']]['ap'],'estimated_pl':update['estimated_pl'],'estimated_return':update['estimated_return']},ignore=True)
+   store.call('POST','kst_option_marks',params={'on_conflict':'signal_id,quote_at'},data={'id':str(uuid.uuid4()),'signal_id':s['id'],'observed_at':stamp(now),'quote_at':update['last_quote_at'],'bid':update['last_bid'],'ask':quotes[s['contract']]['ap'],'estimated_pl':update['estimated_pl'],'estimated_return':update['estimated_return']},prefer='resolution=ignore-duplicates,return=minimal')
    store.patch('kst_option_signals',s['id'],update)
 def publish_request_choice(store,c,req,now,fee,version):
  # Each requested recommendation keeps its own immutable price/time baseline.

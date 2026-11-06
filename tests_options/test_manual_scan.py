@@ -36,3 +36,20 @@ def test_manual_request_scans_all_configured_symbols():
          patch('kst_options.worker.sector_returns', return_value={}):
         scan(Store(), provider, now)
     assert provider.symbols == {'AAPL','PFE','RIVN'}
+
+
+def test_tracking_ignores_duplicate_signal_quote_pair():
+    from kst_options.worker import track
+    now = datetime(2026, 11, 6, 20, tzinfo=timezone.utc)
+    calls=[]
+    class Store:
+        def rows(self, *args, **kwargs):
+            return [dict(id='s',contract='X',due_at=(now+timedelta(days=1)).isoformat(),quote_at=(now-timedelta(minutes=1)).isoformat(),entry_ask=1)]
+        def call(self, *args, **kwargs): calls.append((args,kwargs))
+        def patch(self, *args, **kwargs): pass
+    class Provider:
+        feed='indicative'
+        def quotes(self, contracts): return {'X':dict(bp=1,ap=1.01,t=now.isoformat())}
+    track(Store(),Provider(),now)
+    assert calls[0][1]['params']=={'on_conflict':'signal_id,quote_at'}
+    assert 'ignore-duplicates' in calls[0][1]['prefer']
