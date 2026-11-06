@@ -4,7 +4,7 @@ from datetime import timedelta
 from .engine import utcnow,stamp,parse,NY,BUDGETS,candidate,deadline,mark,num,requested_choices,context_label,affordable
 from .store import Store
 from .provider import Provider
-from .universe import universe,diverse_choices,rotating_batch,enrichment_shortlist
+from .universe import universe,diverse_choices,rotating_batch,enrichment_shortlist,scan_symbols,priority_index_symbols
 from .evidence_ranking import activity,rank_with_evidence,sector_returns
 from .learning import active,train
 log=logging.getLogger('kst_options')
@@ -40,15 +40,26 @@ def scan(store,provider,now):
  weights,version=active(store);day=now.astimezone(NY).date();candidates={};errors=0
  all_symbols=universe()
  cadence=max(300,int(os.getenv('OPTIONS_SCAN_SECONDS','300')))
- symbols=rotating_batch(all_symbols,started,int(os.getenv('OPTIONS_UNIVERSE_BATCH','12')),cadence)
- # No silent fallback from OPRA to indicative. Index coverage is provider dependent.
+ rotating=rotating_batch(all_symbols,started,int(os.getenv('OPTIONS_UNIVERSE_BATCH','12')),cadence)
+ priority=priority_index_symbols()
+ symbols=scan_symbols(rotating,priority)
+ # SPX is attempted on every scan independently of the rotating stock basket.
+ # No silent feed fallback: unavailable index-chain quotes are never invented.
+ spx_contracts=0
  for symbol in symbols:
-  for lo,hi in [(day,day+timedelta(days=45)),(day+timedelta(days=270),day+timedelta(days=730))]:
+  windows=[(day,day+timedelta(days=7))] if symbol=='SPX' else [(day,day+timedelta(days=45)),(day+timedelta(days=270),day+timedelta(days=730))]
+  for lo,hi in windows:
    try:
     for contract,snapshot in provider.chain(symbol,lo,hi):
      quote_now=utcnow()
      c=candidate(contract,snapshot,quote_now,provider.feed,weights) or candidate(contract,snapshot,quote_now,provider.feed,weights,relaxed=True)
-     if c:candidates[contract]=c
+     if c:
+      if symbol=='SPX':
+       # No SPX entries without a verified underlying and price-structure feed.
+       # Exclude index candidates from the publishing pool entirely for now.
+       spx_contracts+=1
+       continue
+      candidates[contract]=c
    except Exception as exc:errors+=1;log.warning('Chain %s: %s; HTTP %s',symbol,type(exc).__name__,getattr(exc,'status_code','unavailable'))
  now=utcnow()
  candidates={k:c for k,c in candidates.items() if 0<=(now-parse(c['quote_at'])).total_seconds()<=300}
@@ -68,6 +79,17 @@ def scan(store,provider,now):
  if shortlist:
   try:day_volumes=provider.daily_volumes([c['contract'] for c in shortlist],now)
   except Exception as exc:log.warning('Option bar volume data unavailable (%s; HTTP %s); ranking remains structural where absent',type(exc).__name__,getattr(exc,'status_code','unavailable'))
+ # Preserve sampled contract-volume evidence separately from OI and quote sizes.
+ from .strike_volume import strike_activity
+ observed_strikes=strike_activity([c['contract'] for c in shortlist],day_volumes,
+                                  as_of=stamp(now),
+                                  universe_label='enrichment shortlist, not all market contracts')
+ try:
+  store.call('POST','kst_options_strike_activity',
+       data={'id':'latest','observed_at':stamp(now),'payload':observed_strikes},
+       prefer='resolution=merge-duplicates,return=minimal')
+ except Exception:
+  log.warning('Strike-volume report not stored; apply kst_options/market_pulse.sql')
  for c in shortlist:
   sym=c['contract']
   bar=day_volumes.get(sym) or {}
@@ -109,9 +131,10 @@ def scan(store,provider,now):
   message=f'{len(published)} fresh contracts found; '+('three ranked ideas returned.' if len(published)==3 else 'fewer than three valid quotes available; no contracts invented.')
   if errors:message+=' Some chain requests failed; results are incomplete.'
   store.patch('kst_signal_requests',req['id'],{'status':'DONE','completed_at':stamp(utcnow()),'results':published,'message':message})
- store.health('DEGRADED' if errors else 'OK',f'{len(symbols)}/{len(all_symbols)} symbols scanned this cycle; {len(candidates)} qualifying contracts; {len(rows)} new research records; {errors} failed chain requests. Feed: {provider.feed}. No orders submitted.')
+ spx_note=('SPX index options scanned as non-actionable watchlist; verified cash-index feed and structure triggers not connected.' if spx_contracts else 'SPX index chain unavailable or no fresh eligible quotes; no SPX signals fabricated.') if priority else 'SPX index scan disabled by configuration.'
+ store.health('DEGRADED' if errors or priority else 'OK',f'{len(rotating)}/{len(all_symbols)} rotating symbols plus {len(priority)} priority indexes attempted; {len(candidates)} quote-qualified research candidates; {len(rows)} new research records; {errors} failed chain requests. {spx_note} Feed: {provider.feed}. No orders submitted.')
 def run():
- store=Store();provider=None;last_scan=0;last_news=0;last_proxy=0;last_stocks=0
+ store=Store();provider=None;last_scan=0;last_news=0;last_proxy=0;last_stocks=0;last_pulse=0
  while True:
   try:
    now=utcnow()
@@ -138,6 +161,18 @@ def run():
      try:store.call('POST','kst_options_health',data={'id':'stocks','updated_at':stamp(utcnow()),'status':'ERROR','message':'Stock research failed; check stock migration, keys and entitlement.'},prefer='resolution=merge-duplicates,return=minimal')
      except Exception:pass
     last_stocks=time.monotonic()
+   # The market-movers scan is independent of the rotating options universe.
+   # A missing table/entitlement must be visible without disabling options.
+   if time.monotonic()-last_pulse>=max(300,int(os.getenv('MARKET_PULSE_SECONDS','300'))):
+    try:
+     from .market_pulse import refresh as refresh_market_pulse
+     report=refresh_market_pulse(store,utcnow())
+     store.call('POST','kst_options_health',data={'id':'market_pulse','updated_at':stamp(utcnow()),'status':'OK','message':f"Measured {report['coverage']['valid']}/{report['coverage']['requested']} stock/ETF movers; bull/bear and 11-sector rankings. Market drivers unverified; no institutional-flow claim."},prefer='resolution=merge-duplicates,return=minimal')
+    except Exception as exc:
+     log.warning('Market pulse failed (%s): check kst_options/market_pulse.sql and entitled stock snapshot feed',type(exc).__name__)
+     try:store.call('POST','kst_options_health',data={'id':'market_pulse','updated_at':stamp(utcnow()),'status':'DEGRADED','message':'Market pulse unavailable; check database migration and data subscription. No leadership claims generated.'},prefer='resolution=merge-duplicates,return=minimal')
+     except Exception:pass
+    last_pulse=time.monotonic()
    if provider is None:provider=Provider()
    track(store,provider,now)
    if os.getenv('OPTIONS_PAPER_AI_ENABLED','true').lower()=='true':
