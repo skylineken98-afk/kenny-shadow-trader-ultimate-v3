@@ -140,6 +140,10 @@ def scan(store,provider,now):
  store.health('DEGRADED' if errors or priority else 'OK',f'{len(rotating)}/{len(all_symbols)} rotating symbols plus {len(priority)} priority indexes attempted; {len(candidates)} quote-qualified research candidates; {len(rows)} new research records; {errors} failed chain requests. {spx_note} Feed: {provider.feed}. No orders submitted.')
 def run():
  store=Store();provider=None;last_scan=0;last_news=0;last_proxy=0;last_stocks=0;last_pulse=0
+ if os.getenv('OPTIONS_PAPER_AI_ENABLED','true').lower()=='true':
+  import threading
+  from .paper_runner import run_background
+  threading.Thread(target=run_background,daemon=True,name='paper-agents').start()
  while True:
   try:
    now=utcnow()
@@ -183,18 +187,10 @@ def run():
      except Exception:pass
     last_pulse=time.monotonic()
    if provider is None:provider=Provider()
-   # Research entry decisions run before the large signal-marking backlog.
-   if os.getenv('OPTIONS_PAPER_AI_ENABLED','true').lower()=='true':
-    from .progress import cycle as paper_cycle
-    paper_cycle(store,provider,utcnow(),allow_open=True)
    track(store,provider,now)
-   if os.getenv('OPTIONS_PAPER_AI_ENABLED','true').lower()=='true':
-    from .progress import cycle as paper_cycle
-    paper_cycle(store,provider,utcnow())
    pending=store.rows('kst_signal_requests',status='eq.PENDING',order='created_at.asc',limit=1)
    if pending or time.monotonic()-last_scan>=max(300,int(os.getenv('OPTIONS_SCAN_SECONDS','300'))):
     scan(store,provider,now);train(store);last_scan=time.monotonic()
-    if os.getenv('OPTIONS_PAPER_AI_ENABLED','true').lower()=='true':paper_cycle(store,provider,utcnow(),allow_open=True)
   except Exception as exc:
    try:
     from kst_pro.ops import beat
