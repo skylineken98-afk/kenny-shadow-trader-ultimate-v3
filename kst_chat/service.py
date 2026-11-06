@@ -85,13 +85,16 @@ def snapshot(store,message="",user=None):
   context['market_research'] = {'status':'UNAVAILABLE'}
  return context,sources
 
-def handle(method,path,body,user,store,env,http=http_json,emit=None):
+def handle(method,path,body,user,store,env,http=http_json,emit=None,ai_key=None):
  now=datetime.now(timezone.utc).isoformat()
  from kst_pro.routes import PREFIXES,handle as extra_handle
  from kst_pro.membership import require_access
  try:
+  # A user's own AI key must not bypass KST's paid research entitlement.
+  premium=('/api/chat/message','/api/chat/suggestions','/api/chat/market-refresh',
+           '/api/chat/ticker-search','/api/chat/history-search')
+  if path in premium:require_access(store,user,env)
   if path.startswith(PREFIXES):return extra_handle(method,path,body,user,store,env)
-  if path=='/api/chat/message' or (path=='/api/chat/suggestions' and method=='POST'):require_access(store,user,env)
  except PermissionError as exc:raise ApiError(403,str(exc))
  except ValueError as exc:raise ApiError(400,str(exc))
  if path=='/api/chat/suggestions':
@@ -179,9 +182,11 @@ def handle(method,path,body,user,store,env,http=http_json,emit=None):
   if existing:
    if existing[0]['status']=='COMPLETE':return {'id':turn_id,'text':existing[0]['assistant_text'],'sources':existing[0]['sources'],'cached':True}
    raise ApiError(409,'This message is pending or failed; open history before sending again')
-  key=(env.get('OPENAI_API_KEY') or '').strip()
-  if key and any(c.isspace() for c in key):raise ApiError(503,'The Railway OpenAI API key contains whitespace. Copy only the API key value.')
-  if not key:raise ApiError(503,'Configure OPENAI_API_KEY on the Railway chat service')
+  # No fallback to an owner key, even if OPENAI_API_KEY exists in Railway.
+  # Per-request private credentials MUST come from the authenticated user.
+  from .user_provider import validate_key,complete
+  provider=str(body.get('ai_provider') or 'openai').lower()
+  key=validate_key(provider,ai_key)
   allowed=store.call('POST','rpc/kst_chat_reserve',data={'p_user':user,'p_daily':int(env.get('CHAT_DAILY_LIMIT','40')),'p_minute':6,'p_global':int(env.get('CHAT_GLOBAL_DAILY_LIMIT','500'))})
   if not allowed:raise ApiError(429,'KST Chat has reached its per-minute or daily message allowance')
   history=list(reversed(store.rows('kst_chat_turns',conversation_id='eq.'+conv['id'],user_id='eq.'+user,status='eq.COMPLETE',order='created_at.desc',limit=20)))
@@ -190,17 +195,15 @@ def handle(method,path,body,user,store,env,http=http_json,emit=None):
   context,sources=snapshot(store,message,user)
   store.insert('kst_chat_turns',{'id':turn_id,'conversation_id':conv['id'],'user_id':user,'user_text':message,'status':'PENDING','attachments':attachments})
   try:
-   model_http=http
-   if emit is not None:
-    from .streaming import request as stream_request
-    model_http=lambda url,headers,payload,**kwargs:stream_request(url,headers,payload,emit,**kwargs)
-   data=model_http('https://api.openai.com/v1/responses',{'Authorization':'Bearer '+key},{'model':env.get('OPENAI_CHAT_MODEL','gpt-5-mini'),'instructions':INSTRUCTIONS+'\n'+CHART_INSTRUCTIONS,'input':build_input(history,memory,recalled,context,message,images),'store':False,'max_output_tokens':min(4000,max(500,int(env.get('CHAT_MAX_OUTPUT_TOKENS','3000'))))},timeout=55)
-   text=response_text(data)
+   text=complete(provider,key,build_input(history,memory,recalled,context,message,images),
+      INSTRUCTIONS+'\n'+CHART_INSTRUCTIONS,
+      max_tokens=int(env.get('CHAT_MAX_OUTPUT_TOKENS','1500')),
+      emit=emit,openai_http=http)
    store.call('PATCH','kst_chat_turns',{'id':'eq.'+turn_id,'user_id':'eq.'+user},{'assistant_text':text,'status':'COMPLETE','sources':sources,'completed_at':datetime.now(timezone.utc).isoformat()})
    store.call('PATCH','kst_chat_conversations',{'id':'eq.'+conv['id'],'user_id':'eq.'+user},{'updated_at':now,'title':message[:70] if not history else conv['title']})
    return {'id':turn_id,'text':text,'sources':sources}
   except Exception as exc:
    store.call('PATCH','kst_chat_turns',{'id':'eq.'+turn_id,'user_id':'eq.'+user},{'status':'FAILED'})
-   if isinstance(exc,ApiError) and exc.status==401:raise ApiError(503,'OpenAI authorization failed; check the Railway API key and project access')
+   if isinstance(exc,ApiError) and exc.status==401:raise ApiError(401,'Your provider API key was rejected; connect a valid key with available credits')
    raise
  raise ApiError(404,'Chat route not found')

@@ -46,7 +46,7 @@ def test_chat_response_persists_privately_and_is_idempotent():
  def http(url,headers,payload,**kw):
   calls.append(payload);assert url=='https://api.openai.com/v1/responses';assert payload['store'] is False;assert all(x['role'] in ('user','assistant') for x in payload['input'])
   return {'output':[{'type':'message','content':[{'type':'output_text','text':'Paper accounts are simulated.'}]}]}
- first=handle('POST','/api/chat/message',body,U1,db,ENV,http);second=handle('POST','/api/chat/message',body,U1,db,ENV,http)
+ first=handle('POST','/api/chat/message',body,U1,db,ENV,http,ai_key='sk-user-provided-test-key');second=handle('POST','/api/chat/message',body,U1,db,ENV,http)
  assert first['text']==second['text'] and second['cached'] and len(calls)==1 and db.reserves==1
  assert db.data['kst_chat_turns'][0]['user_id']==U1
  assert handle('GET','/api/chat/conversations/'+C2,{},U2,db,ENV)['turns']==[]
@@ -65,3 +65,20 @@ def test_prompt_limits_and_untrusted_memory_roles():
 if __name__=='__main__':
  for name,func in list(globals().items()):
   if name.startswith('test_'):func();print('PASS',name)
+
+def test_no_user_key_no_provider_call_or_site_cost():
+ db=Store();body={'conversation_id':C1,'message':'What about AAPL?','request_id':str(uuid.uuid4())}
+ def fail(*args,**kwargs):raise AssertionError('Never call a model with an owner key')
+ expect(400,lambda:handle('POST','/api/chat/message',body,U1,db,{**ENV,'OPENAI_API_KEY':'sk-OWNER-NEVER-USE'},fail))
+ assert db.reserves==0 and db.data['kst_chat_turns']==[]
+
+def test_per_user_key_sent_but_not_saved_to_database():
+ db=Store();body={'conversation_id':C1,'message':'Review IWM','request_id':str(uuid.uuid4())}
+ key='sk-client-secret-must-never-be-stored'
+ calls=[]
+ def fake(url,headers,payload,**kwargs):
+  calls.append((url,headers,payload))
+  assert headers['Authorization']=='Bearer '+key
+  return {'output':[{'type':'message','content':[{'type':'output_text','text':'IWM setup is mixed.'}]}]}
+ handle('POST','/api/chat/message',body,U1,db,ENV,fake,ai_key=key)
+ assert len(calls)==1 and key not in str(db.data)
