@@ -141,6 +141,10 @@ def run():
    now=utcnow()
    from kst_pro.ops import beat
    beat(store,'options')
+   # Serve explicit requests before the potentially large tracking backlog.
+   pending=store.rows('kst_signal_requests',status='eq.PENDING',order='created_at.asc',limit=1)
+   if pending:
+    scan(store,provider or Provider(),utcnow());last_scan=time.monotonic()
    if time.monotonic()-last_news>=max(60,int(os.getenv('NEWS_POLL_SECONDS','300'))):
     try:
      from .news import refresh
