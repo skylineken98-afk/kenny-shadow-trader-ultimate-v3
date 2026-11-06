@@ -40,7 +40,8 @@ def scan(store,provider,now):
  weights,version=active(store);day=now.astimezone(NY).date();candidates={};errors=0
  all_symbols=universe()
  cadence=max(300,int(os.getenv('OPTIONS_SCAN_SECONDS','300')))
- rotating=rotating_batch(all_symbols,started,int(os.getenv('OPTIONS_UNIVERSE_BATCH','12')),cadence)
+ pending=store.rows('kst_signal_requests',status='eq.PENDING',created_at='lte.'+stamp(started),order='created_at.asc',limit=100)
+ rotating=all_symbols if pending else rotating_batch(all_symbols,started,int(os.getenv('OPTIONS_UNIVERSE_BATCH','12')),cadence)
  priority=priority_index_symbols()
  symbols=scan_symbols(rotating,priority)
  # SPX is attempted on every scan independently of the rotating stock basket.
@@ -123,7 +124,7 @@ def scan(store,provider,now):
     rows.append(dict(c,id=str(uuid.uuid4()),created_at=stamp(now),batch_id=batch,budget=budget,fee_estimate=fee,model_version=version,due_at=stamp(deadline(c,now)),state='OPEN'))
  if rows:store.insert('kst_option_signals',rows)
  # Fulfill only requests queued before this scan began. Later requests wait for a new scan.
- requests=store.rows('kst_signal_requests',status='eq.PENDING',created_at='lte.'+stamp(started),order='created_at.asc',limit=100)
+ requests=pending
  for req in requests:
   choices=requested_choices(candidates.values(),req['category'],req['budget'],fee);published=[]
   for c in choices:
@@ -178,7 +179,7 @@ def run():
    if os.getenv('OPTIONS_PAPER_AI_ENABLED','true').lower()=='true':
     from .progress import cycle as paper_cycle
     paper_cycle(store,provider,utcnow())
-   pending=store.rows('kst_signal_requests',status='eq.PENDING',created_at='gte.'+stamp(now-timedelta(minutes=10)),order='created_at.asc',limit=1)
+   pending=store.rows('kst_signal_requests',status='eq.PENDING',order='created_at.asc',limit=1)
    if pending or time.monotonic()-last_scan>=max(300,int(os.getenv('OPTIONS_SCAN_SECONDS','300'))):
     scan(store,provider,now);train(store);last_scan=time.monotonic()
     if os.getenv('OPTIONS_PAPER_AI_ENABLED','true').lower()=='true':paper_cycle(store,provider,utcnow(),allow_open=True)
