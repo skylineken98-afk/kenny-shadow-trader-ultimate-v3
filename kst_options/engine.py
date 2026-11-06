@@ -23,7 +23,7 @@ def quote(q,now,max_age=300):
  return bid,ask,t
 def category(exp,now):
  d=(exp-now.astimezone(NY).date()).days
- return '0DTE' if d==0 else 'Swings' if 1<=d<=45 else 'LEAPS' if 270<=d<=730 else None
+ return '0DTE' if d==0 else 'Swings' if 5<=d<=45 else 'LEAPS' if 270<=d<=730 else None
 def candidate(contract,snapshot,now,feed,weights=BASE,relaxed=False):
  match=re.fullmatch(r'([A-Z.]+)(\d{6})([CP])(\d{8})',contract)
  if not match:return None

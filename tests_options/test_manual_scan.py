@@ -6,6 +6,8 @@ from kst_options.worker import scan
 
 def test_swing_window_stays_45_days():
     now = datetime(2026, 11, 6, 20, tzinfo=timezone.utc)
+    assert category(now.date() + timedelta(days=4), now) is None
+    assert category(now.date() + timedelta(days=5), now) == 'Swings'
     assert category(now.date() + timedelta(days=45), now) == 'Swings'
     assert category(now.date() + timedelta(days=46), now) is None
 

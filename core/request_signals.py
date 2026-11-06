@@ -10,7 +10,7 @@ def dte_group(expiration, today):
     try: days = (date.fromisoformat(str(expiration)[:10]) - today).days
     except (TypeError, ValueError): return None
     if days == 0: return '0DTE'
-    if 2 <= days <= 60: return 'Swings'
+    if 5 <= days <= 45: return 'Swings'
     if days >= 365: return 'LEAPS'
     return None
 
