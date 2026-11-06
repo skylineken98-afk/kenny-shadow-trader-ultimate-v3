@@ -1,4 +1,4 @@
--- Kenny's winner definition: positive same-day close OR +50% target observed
+-- Kenny's winner definition: positive same-day close OR +30% target observed
 -- before -30% stop. All prices are sampled research estimates, not fills.
 -- Earliest signal per contract/New York day prevents budget duplication.
 with signals as (
@@ -11,8 +11,8 @@ with signals as (
         (s.quote_at<=s.created_at and s.created_at-s.quote_at<=interval '60 seconds') as entry_time_ok
  from signals s
  left join lateral (
-  select min(m.quote_at) filter(where m.estimated_return>=.5) as target_at,
-         min(m.quote_at) filter(where m.estimated_return<=-.3) as stop_at
+  select min(m.quote_at) filter(where (m.bid-s.entry_ask)/s.entry_ask>=.3) as target_at,
+         min(m.quote_at) filter(where (m.bid-s.entry_ask)/s.entry_ask<=-.3) as stop_at
   from public.kst_option_marks m where m.signal_id=s.id
    and m.quote_at>s.created_at and m.quote_at<=s.day_close
    and m.observed_at>=m.quote_at and m.observed_at-m.quote_at<=interval '5 minutes'

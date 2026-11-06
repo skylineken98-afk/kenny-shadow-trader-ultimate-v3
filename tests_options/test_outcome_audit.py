@@ -23,12 +23,12 @@ def test_target_then_stop_and_fee_adjustment():
  s.update(mark(s,dict(bp=.5,ap=.52,t=stamp(later)),later))
  assert s['risk_snapshot']['observed_barrier']['outcome']=='TARGET_FIRST_OBSERVED'
  r=mark(signal(),dict(bp=1.5,ap=1.52,t=stamp(NOW)),NOW,fee=1)
- assert 'risk_snapshot' not in r # +49%, not the +50% barrier
+ assert 'observed_barrier' not in r['risk_snapshot'] # +49%, not the +50% barrier
 
 def test_barrier_after_horizon_does_not_rewrite_earlier_path():
  s=signal();s['due_at']=stamp(NOW-timedelta(seconds=1))
  r=mark(s,dict(bp=2,ap=2.02,t=stamp(NOW)),NOW)
- assert 'risk_snapshot' not in r
+ assert 'observed_barrier' not in r['risk_snapshot']
  assert r['state']=='CLOSED'
 
 def test_setup_timestamp_and_bar_freshness_are_both_required():

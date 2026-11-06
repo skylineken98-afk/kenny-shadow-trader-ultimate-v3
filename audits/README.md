@@ -50,3 +50,18 @@ earlier stop or target, and a gap-through price is not a guaranteed fill at the
 threshold. Repeated contracts across days and common market moves are correlated.
 A proper strategy comparison needs longer forward data, chronological holdout,
 spread/fee/slippage checks, average returns, and coverage reported with win rate.
+
+## Profit-lock update
+
+Kenny subsequently set target one to +30%, followed by +40%, +50%, +75%,
++100%, and additional 25-percentage-point steps. The daily audit now uses
++30% for its target-first criterion; the initial snapshot above used +50%
+and is retained as historical context, not the current win rate.
+
+New monitoring records use risk_snapshot.profit_lock with a monotonic stop
+reference at the highest crossed milestone. A later sampled bid at or below
+the prior stop records an observed research exit, including the actual sampled
+return if it gaps below the stop. It does not submit or modify broker orders.
+The ladder uses gross premium returns, excluding fees, and starts when the
+tracker initializes. Prior data is not retroactively assigned a stop exit.
+The fixed +50%/-30% observed_barrier remains a separate legacy comparison.

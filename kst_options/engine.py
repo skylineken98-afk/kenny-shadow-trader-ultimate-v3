@@ -71,6 +71,11 @@ def mark(signal,q,now,fee=0):
            'limitation':'First sampled crossing only; intrapoll path and execution unverified'}
   risk['observed_barrier']=barrier
   result['risk_snapshot']=risk
+ from .profit_lock import observe
+ # Gross premium ladder is distinct from fee-adjusted P/L and horizon labels.
+ risk=dict(result.get('risk_snapshot') or signal.get('risk_snapshot') or {})
+ risk['profit_lock']=observe(signal,bid,t)
+ result['risk_snapshot']=risk
  # Label only near-horizon executable quotes. No fabricated expiry settlement.
  if t>=parse(signal['due_at']):
   late=(t-parse(signal['due_at'])).total_seconds()
