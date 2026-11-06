@@ -41,7 +41,8 @@ def scan(store,provider,now):
  all_symbols=universe()
  cadence=max(300,int(os.getenv('OPTIONS_SCAN_SECONDS','300')))
  pending=store.rows('kst_signal_requests',status='eq.PENDING',created_at='lte.'+stamp(started),order='created_at.asc',limit=100)
- rotating=all_symbols if pending else rotating_batch(all_symbols,started,int(os.getenv('OPTIONS_UNIVERSE_BATCH','12')),cadence)
+ daily_window=now.astimezone(NY).hour*60+now.astimezone(NY).minute>=945
+ rotating=all_symbols if pending or daily_window else rotating_batch(all_symbols,started,int(os.getenv('OPTIONS_UNIVERSE_BATCH','12')),cadence)
  priority=priority_index_symbols()
  symbols=scan_symbols(rotating,priority)
  # SPX is attempted on every scan independently of the rotating stock basket.
@@ -182,6 +183,10 @@ def run():
      except Exception:pass
     last_pulse=time.monotonic()
    if provider is None:provider=Provider()
+   # Research entry decisions run before the large signal-marking backlog.
+   if os.getenv('OPTIONS_PAPER_AI_ENABLED','true').lower()=='true':
+    from .progress import cycle as paper_cycle
+    paper_cycle(store,provider,utcnow(),allow_open=True)
    track(store,provider,now)
    if os.getenv('OPTIONS_PAPER_AI_ENABLED','true').lower()=='true':
     from .progress import cycle as paper_cycle

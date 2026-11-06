@@ -65,3 +65,55 @@ return if it gaps below the stop. It does not submit or modify broker orders.
 The ladder uses gross premium returns, excluding fees, and starts when the
 tracker initializes. Prior data is not retroactively assigned a stop exit.
 The fixed +50%/-30% observed_barrier remains a separate legacy comparison.
+
+## Website scoreboard and paper research
+
+Apply `kst_options/scoreboard.sql` and `kst_options/paper_profit_lock.sql` after
+`schema.sql`. Both were applied and verified on November 6. The scoreboard
+is service-role-only and the public Worker exposes its fixed research projection.
+It includes winners, losers, missing evidence, and major winners ranked by
+observed peak (not realized profit). The initial-stop/target count is distinct
+from the subsequent profit-lock ladder exit and daily close reference.
+
+From this release, new option signal records carry exit_policy=profit-lock-v1
+and track until their sampled ladder exit or expiration, rather than ending
+all swing observations after 24 hours. Historical horizons are preserved.
+
+Paper agents can evaluate both OPRA and indicative feeds with matching source
+labels; indicative outcomes are stored as paper_indicative and remain ineligible
+for model promotion. Virtual accounts, one-position limits, risk fractions,
+cooldowns, and daily loss limits are unchanged. No stale or out-of-session
+entry is forced. Their SQL marker uses the same 30/40/50/75/100/25-point ladder.
+
+Each paper agent starts with $1,000 virtual cash. There is no one-entry daily cap; additional qualified entries are allowed after exits, subject to the existing cooldowns, one-open-position rule, cash, risk, and daily loss limits. No daily trade count is guaranteed.
+
+Daily paper-entry mandate: from 15:45 ET, an agent without an entry that day
+can use a clearly labeled DAILY_REQUIRED_RESEARCH exploration from the best
+fresh, qualified affordable contract, even without directional alignment.
+Premium is capped at $100, estimated stop risk at 3% of cash, and existing
+loss limits remain. Missing valid quotes/cash can still block entry and must
+produce a visible reason; no fabricated fills. Exploration outcomes are tagged
+paper_daily_exploration and excluded from strategy-learning promotion.
+
+Aggressive mode prioritizes 0DTE then nearest expiry, holds at most 15 minutes,
+and may re-enter sequentially with a two-minute loss cooldown/five-minute
+same-contract cooldown. Regular checks are worker-cycle based, not tick-level
+execution. Source/latency and qualifying setup constraints remain visible.
+
+### Final scalper settings
+
+The later scalper instructions supersede the earlier 15-minute horizon and
+2/5-minute cooldown plan: initial stop −25%; locks at 30/40/50/75/100 then
+50-percentage-point steps. After +30%, protect 85% of the observed gain;
+the tighter stop applies. No profit ceiling. Research positions end at the
+observed stop or session close, with no fabricated closing fill.
+
+Scale-ins require a new 30%-higher bid, fresh completed-bar trend confirmation,
+affordable cash, and added stop risk <=2% of cash; at most three contracts.
+Average cost and quantity-based P/L are reconciled and the absolute stop cannot
+fall on an add. Strong-trend re-entry can bypass the ordinary cooldown, but
+requires a current independent setup; each re-entry gets its own immutable
+signal baseline when needed. Weak/stale trend signals retain ordinary guards.
+
+Database stop/quantity accounting was exercised in a rolled-back transaction;
+no synthetic position or event was retained. $1,000 per agent was verified.

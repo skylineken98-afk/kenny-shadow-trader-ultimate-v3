@@ -89,8 +89,8 @@ grant select,insert,update on public.kst_market_proxy to service_role;
 revoke all on public.kst_market_proxy from anon,authenticated;
 -- NEW research portfolios only. Existing/live balances are never changed.
 create table if not exists public.kst_agent_accounts (
- agent text primary key, starting_balance numeric not null default 300 check(starting_balance>0),
- cash numeric not null default 300 check(cash>=0), realized_pl numeric not null default 0,
+ agent text primary key, starting_balance numeric not null default 1000 check(starting_balance>0),
+ cash numeric not null default 1000 check(cash>=0), realized_pl numeric not null default 0,
  created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
 insert into public.kst_agent_accounts(agent) values ('conservative'),('balanced'),('aggressive'),('challenge'),('daily_10pct_research') on conflict do nothing;

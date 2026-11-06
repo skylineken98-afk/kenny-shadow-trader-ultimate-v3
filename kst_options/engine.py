@@ -41,12 +41,12 @@ def candidate(contract,snapshot,now,feed,weights=BASE,relaxed=False):
  if delta is None or not ((.15 if relaxed else .20)<=abs(delta)<=(.85 if relaxed else .80)):return None
  # Structural quality only; never a probability of profit.
  f=[max(0,1-spread/.15),max(0,1-abs(abs(delta)-.5)/.3),1-min(1,ask*100/3000)]
- return dict(risk_snapshot={'greeks':{k:num((snapshot.get('greeks') or {}).get(k)) for k in ('delta','gamma','theta','vega','rho')},'implied_volatility':num(snapshot.get('impliedVolatility')),'observed_at':stamp(now),'source':'Provider snapshot. Greek and IV timestamps/units are not independently verified; quote time is not a Greek timestamp.'},quality_label='WATCHLIST' if relaxed else 'QUALIFIED',contract=contract,underlying=match[1],expiration=str(exp),option_type='CALL' if match[3]=='C' else 'PUT',strike=int(match[4])/1000,category=cat,entry_ask=ask,entry_bid=bid,quote_at=stamp(t),feed=feed,features=f,score=score(f,weights))
+ return dict(risk_snapshot={'exit_policy':'profit-lock-v1','greeks':{k:num((snapshot.get('greeks') or {}).get(k)) for k in ('delta','gamma','theta','vega','rho')},'implied_volatility':num(snapshot.get('impliedVolatility')),'observed_at':stamp(now),'source':'Provider snapshot. Greek and IV timestamps/units are not independently verified; quote time is not a Greek timestamp.'},quality_label='WATCHLIST' if relaxed else 'QUALIFIED',contract=contract,underlying=match[1],expiration=str(exp),option_type='CALL' if match[3]=='C' else 'PUT',strike=int(match[4])/1000,category=cat,entry_ask=ask,entry_bid=bid,quote_at=stamp(t),feed=feed,features=f,score=score(f,weights))
 def score(f,w):return round(100*sum(a*b for a,b in zip(f,w)),3)
 def deadline(c,now):
  horizon={'0DTE':timedelta(hours=1),'Swings':timedelta(days=1),'LEAPS':timedelta(days=7)}[c['category']]
  expiry=datetime.combine(datetime.fromisoformat(c['expiration']).date(),datetime.min.time(),NY).replace(hour=16).astimezone(timezone.utc)
- return min(now+horizon,expiry)
+ return expiry if (c.get('risk_snapshot') or {}).get('exit_policy')=='profit-lock-v1' else min(now+horizon,expiry)
 def mark(signal,q,now,fee=0):
  fresh=quote(q,now)
  if fresh is None:return None
@@ -76,6 +76,9 @@ def mark(signal,q,now,fee=0):
  risk=dict(result.get('risk_snapshot') or signal.get('risk_snapshot') or {})
  risk['profit_lock']=observe(signal,bid,t)
  result['risk_snapshot']=risk
+ if risk.get('exit_policy')=='profit-lock-v1' and risk['profit_lock'].get('stop_hit_at'):
+  result.update(state='CLOSED',closed_at=stamp(t),outcome_return=ret)
+  return result
  # Label only near-horizon executable quotes. No fabricated expiry settlement.
  if t>=parse(signal['due_at']):
   late=(t-parse(signal['due_at'])).total_seconds()
