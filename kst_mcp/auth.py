@@ -49,7 +49,7 @@ def validate_claims(claims, config):
     except (KeyError, ValueError, TypeError, AttributeError):
         raise AccessError(401, 'Invalid account identity') from None
     if (claims.get('client_id') not in config.clients
-            or claims.get('role') != 'authenticated'
+            or claims.get('role') != 'kst_mcp_reader'
             or claims.get('is_anonymous') is not False
             or claims.get('kst_mcp_access') != 'read'):
         raise AccessError(403, 'Read-only KST connector consent is required')

@@ -32,11 +32,11 @@ def tools():
 
 
 class Reader:
-    def __init__(self, env):
+    def __init__(self, env, token):
+        from kst_chat.logic import public_config
+        config = public_config(env)
         self.base = env['SUPABASE_URL'].rstrip('/') + '/rest/v1/'
-        key = env['SUPABASE_SERVICE_ROLE_KEY']
-        self.headers = {'apikey': key}
-        if not key.startswith('sb_secret_'): self.headers['Authorization'] = 'Bearer ' + key
+        self.headers = {'apikey': config['publishable_key'], 'Authorization': 'Bearer ' + token}
 
     def rows(self, table, **params):
         # Table and query names only originate from the dispatch below.

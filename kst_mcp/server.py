@@ -119,7 +119,8 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length <= 16384: raise AccessError(413, 'Request exceeds the connector limit')
             try: message = json.loads(self.rfile.read(length))
             except (ValueError, UnicodeError): raise AccessError(400, 'Invalid JSON') from None
-            result = rpc(message, user, self.server.reader)
+            reader = self.server.reader_factory(self.server.env, self.headers.get('Authorization', '')[7:])
+            result = rpc(message, user, reader)
             self.reply(202 if result is None else 200, result)
         except AccessError as exc:
             headers = {'WWW-Authenticate': 'Bearer resource_metadata="' + self.server.config.metadata_url + '"'} if exc.status == 401 else {}
@@ -138,7 +139,7 @@ class Server(ThreadingHTTPServer):
         self.config = Config.load(env)
         self.enabled = env.get('KST_MCP_ENABLED') == 'true'
         self.auth = Authenticator(self.config)
-        self.reader = Reader(env) if self.enabled else None
+        self.reader_factory = Reader
         self.limiter = RateLimiter()
         self.slots = threading.BoundedSemaphore(24)
         super().__init__(address, Handler)

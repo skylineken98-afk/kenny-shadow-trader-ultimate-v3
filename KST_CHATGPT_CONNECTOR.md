@@ -12,7 +12,7 @@ positions columns used here. `kst_market_pulse` was absent from the inspected in
 result, so that tool may return unavailable until its existing migration is installed. The public
 OAuth discovery endpoint returned HTTP 404 `feature_disabled`: OAuth server is disabled.
 The selected tables had no client RLS policies; this connector therefore uses carefully bounded,
-projected server-side GETs. Its service credential never goes to ChatGPT or the browser.
+projected user-token GETs under a dedicated read-only database role. No service-role secret is provisioned to this connector.
 
 ## Implemented
 
@@ -20,7 +20,7 @@ projected server-side GETs. Its service credential never goes to ChatGPT or the 
 * Seven tools: search/explain signals, market overview, earnings research, recorded outcomes,
   personal records and headline links. No broker credentials, imported private fills or admin data.
 * JWT signature, issuer, resource audience, expiry, account UUID, approved OAuth client,
-  authenticated role, non-anonymous account and `kst_mcp_access=read` validation.
+  dedicated kst_mcp_reader role, non-anonymous account and `kst_mcp_access=read` validation.
 * Ownership filtering uses the verified token subject, never a model-supplied user ID.
 * Every result has retrieval time and limitations; stale executable-looking prices are suppressed.
   News/calendar results are not presented as company-confirmed facts. No fabricated performance.
@@ -42,7 +42,6 @@ Required server-only settings:
 
 ```
 SUPABASE_URL=<existing project URL>
-SUPABASE_SERVICE_ROLE_KEY=<existing secret, via Railway reference>
 SUPABASE_PUBLISHABLE_KEY=<public project key>
 KST_MCP_RESOURCE=https://<connector-host>/mcp
 KST_MCP_CLIENT_IDS=<approved ChatGPT OAuth client UUIDs>
@@ -53,7 +52,7 @@ KST_MCP_ENABLED=false
 `/health` reports process health, not verified OAuth/data readiness. `false` disables data calls
 and consent sign-in. The server requires valid configuration even while disabled.
 There are no hardcoded production hostnames/client IDs. Only publishable configuration is
-exposed at `/oauth/config` when enabled. Never place the service credential in that endpoint.
+exposed at `/oauth/config` when enabled. The connector has no service credential.
 
 ## Remaining activation steps (required, not completed)
 
@@ -74,7 +73,7 @@ exposed at `/oauth/config` when enabled. Never place the service credential in t
    reject OAuth tokens; inspect other entry points before enabling the client.
 6. Ensure account email confirmation and non-anonymous token claims are configured. Verify
    discovery metadata, issuer, resource handling and PKCE from ChatGPT end to end.
-7. Test consent Allow/Deny, refresh, disconnect/revocation and both accounts' isolation.
+7. Apply the reviewed reader_role.sql and test its column grants and RLS with two accounts. Test consent Allow/Deny, refresh, disconnect/revocation and both accounts' isolation.
    Access-token revocation is bounded by five-minute expiry; instant revocation is not claimed.
    Revoking an OAuth client must stop refresh. Compare revoked and expired behavior in practice.
 8. Only after these pass, set `KST_MCP_ENABLED=true`, test in ChatGPT privately and record the

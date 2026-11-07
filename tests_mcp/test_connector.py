@@ -104,7 +104,7 @@ class AuthTests(unittest.TestCase):
         self.config = Config.load(ENV)
         self.claims = {'sub': USER, 'iss': self.config.issuer, 'aud': self.config.resource,
                        'exp': int(time.time()) + 300, 'iat': int(time.time()), 'client_id': 'chatgpt',
-                       'role': 'authenticated', 'is_anonymous': False, 'kst_mcp_access': 'read'}
+                       'role': 'kst_mcp_reader', 'is_anonymous': False, 'kst_mcp_access': 'read'}
         self.auth = Authenticator(self.config)
         self.auth.keys = Mock()
         self.auth.keys.get_signing_key_from_jwt.return_value = Mock(key=self.private.public_key())
@@ -117,7 +117,7 @@ class AuthTests(unittest.TestCase):
         other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         with self.assertRaises(AccessError): self.auth.authenticate(self.token(key=other))
     def test_website_token_or_unapproved_client_rejected(self):
-        for changes in ({'client_id': None}, {'client_id': 'another-app'}, {'kst_mcp_access': None}, {'is_anonymous': True}, {'role': 'service_role'}):
+        for changes in ({'client_id': None}, {'client_id': 'another-app'}, {'kst_mcp_access': None}, {'is_anonymous': True}, {'role': 'service_role'}, {'role': 'authenticated'}):
             with self.assertRaises(AccessError): self.auth.authenticate(self.token({**self.claims, **changes}))
     def test_configuration_fails_closed(self):
         for changes in ({'KST_MCP_CLIENT_IDS': ''}, {'KST_MCP_RESOURCE': 'http://kst.example/mcp'}, {'SUPABASE_URL': 'https://evil.example'}):
@@ -153,12 +153,13 @@ class TransportTests(unittest.TestCase):
 
     def test_authenticated_tools_http_and_notifications(self):
         self.server.enabled = True; self.server.auth = Mock(); self.server.auth.authenticate.return_value = USER
-        self.server.reader = Mock(); self.server.reader.rows.return_value = []
+        reader = Mock(); reader.rows.return_value = []
+        self.server.reader_factory = Mock(return_value=reader)
         headers = {'Accept': 'application/json, text/event-stream', 'Content-Type': 'application/json', 'MCP-Protocol-Version': '2025-06-18'}
         message = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'get_my_records'}}
         with urlopen(Request(self.base + '/mcp', data=json.dumps(message).encode(), headers=headers)) as response:
             self.assertEqual(json.load(response)['result']['structuredContent']['status'], 'NO_MATCHING_DATA')
-        self.assertEqual(self.server.reader.rows.call_args.kwargs['user_id'], 'eq.' + USER)
+        self.assertEqual(reader.rows.call_args.kwargs['user_id'], 'eq.' + USER)
         message = {'jsonrpc': '2.0', 'method': 'notifications/initialized'}
         with urlopen(Request(self.base + '/mcp', data=json.dumps(message).encode(), headers=headers)) as response:
             self.assertEqual(response.status, 202); self.assertEqual(response.read(), b'')
