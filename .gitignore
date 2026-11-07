@@ -7,3 +7,4 @@ node_modules/
 .env.*.local
 /backups/
 *.kstenc
+/kst_mcp/static/consent.bundle.js

@@ -1,0 +1,1 @@
+{"name":"kst-mcp-consent","private":true,"version":"0.1.0","type":"module","scripts":{"build":"esbuild consent.js --bundle --minify --outfile=static/consent.bundle.js --target=es2022"},"dependencies":{"@supabase/supabase-js":"2.119.0"},"devDependencies":{"esbuild":"0.25.12"}}
