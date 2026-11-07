@@ -29,7 +29,9 @@ def levels(df,interval_minutes=None):
             rows=[dict(time=t.isoformat(),open=r.Open,high=r.High,low=r.Low,close=r.Close) for t,r in df.tail(50).iterrows()]
             candle_evidence=review_candles(rows,datetime.now(timezone.utc),interval_minutes)
         except (ValueError,TypeError,AttributeError):pass
-    return {'candle_evidence':candle_evidence,'price':price,'ema20':float(ema20.iloc[-1]),'ema50':float(ema50.iloc[-1]),'ema200':float(ema200.iloc[-1]),'atr':atr,'rvol':rvol,'support':low,'resistance':high,'trend':trend,'volume':float(vol.iloc[-1])}
+    from core.trend_quality import trend_quality
+    quality=trend_quality(df,trend)
+    return {'trend_quality':quality,'candle_evidence':candle_evidence,'price':price,'ema20':float(ema20.iloc[-1]),'ema50':float(ema50.iloc[-1]),'ema200':float(ema200.iloc[-1]),'atr':atr,'rvol':rvol,'support':low,'resistance':high,'trend':trend,'volume':float(vol.iloc[-1])}
 
 def _trend_confluence(symbol):
     from datetime import datetime, timezone
@@ -50,6 +52,9 @@ def _trend_confluence(symbol):
     directions=[frames[k]['trend'] for k in ('4h','1h','5m')]
     aligned=all(x=='BULLISH' for x in directions) or all(x=='BEARISH' for x in directions)
     f=frames['5m'];side=directions[0] if aligned else 'WAIT'
+    quality=f.get('trend_quality', {})
+    aligned=aligned and quality.get('passes', False)
+    if not aligned: side='WAIT'
     stop=f['price']-1.5*f['atr'] if side=='BULLISH' else f['price']+1.5*f['atr'] if side=='BEARISH' else None
     target=f['price']+3*f['atr'] if side=='BULLISH' else f['price']-3*f['atr'] if side=='BEARISH' else None
     return {'symbol':symbol,'status':'SETUP' if aligned else 'WAIT','side':side,'frames':frames,'entry':f['price'] if aligned else None,'stop':stop,'target':target,'confidence_label':'RULE_BASED_ONLY'}
