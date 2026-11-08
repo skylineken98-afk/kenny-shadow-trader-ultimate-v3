@@ -5,6 +5,10 @@ connect to broker accounts or generate orders. Scanner scores are not odds.
 """
 from datetime import datetime, timedelta, timezone
 import re
+import json
+
+# User-authored hypothesis; never a verified signal or automatic score adjustment.
+WEEKLY_TREND_HYPOTHESIS = json.loads("{\"id\":\"weekly_trend_support_friday_recovery_monday_followthrough_v1\",\"recorded_on\":\"2026-11-08\",\"symbol\":\"SPY\",\"status\":\"UNVALIDATED_USER_HYPOTHESIS\",\"source\":\"Kenny chart discussion; IMG_6130.jpeg; screenshot is not a verified market feed\",\"timeframe\":\"weekly structural trend with daily confirmation\",\"separate_from\":\"1H trend / 15M zone / 1M trigger day-trading framework\",\"premise\":\"A pullback to a long-standing rising trendline may form a higher low when support is respected.\",\"user_observation\":\"Friday was sideways with a recovery upward; not independently verified.\",\"confirmation_hypothesis\":\"A bullish Monday holding support provides early continuation evidence; weekly follow-through provides stronger evidence, not certainty.\",\"pending_session\":\"2026-11-09\",\"verification_status\":\"Friday OHLCV, trendline anchors and all prices require provider verification; Monday is pending.\",\"required_collection\":[\"verified daily and completed weekly OHLCV with source and as-of times\",\"trendline anchor dates/prices, detection time and method; freeze anchors at decision time\",\"support distance and touch history; weekly higher-high/higher-low structure\",\"Friday range, close location and recovery from low\",\"Monday open/high/low/close, support hold/break and volume versus prior sessions\",\"weekly close and subsequent 1/5/20-session returns; maximum favorable/adverse excursion\",\"failed bounces, support breaks and comparable setups without Monday confirmation\"],\"proposed_test_definition\":\"Before evaluating, version thresholds for trendline tolerance, Friday sideways/recovery and bullish Monday. Suggested starting Monday condition: completed close above open and prior Friday close while holding the frozen support band. These are test definitions, not measured facts.\",\"invalidation\":\"Record support failures and lower-low/lower-high development; never discard failed examples.\",\"learning_policy\":\"Use as labeled context only. Do not boost scores, claim win probabilities, mark confirmed, or train on fabricated outcomes. Compare chronological held-out results including failures and costs before manual promotion.\",\"live_collection_status\":\"NOT_WIRED_BY_THIS_CHANGE\"}")
 
 def _utc(value):
     try:
@@ -41,7 +45,8 @@ def _wants_trade_research(message):
     q=message.lower()
     return any(word in q for word in ("swing","trade idea","trades","setups","option",
         "best put","best call","buy","short","bullish","bearish","momentum","volume","uptrend",
-        "stocks","recommend","sector","rotation","money flowing","opportunities","scanner"))
+        "stocks","recommend","sector","rotation","money flowing","opportunities","scanner",
+        "trend","trendline","support","friday","monday","weekly","higher low"))
 
 def market_research(store, message, now=None):
     """Answer-supporting, non-user-private market snapshots plus provenance.
@@ -57,6 +62,8 @@ def market_research(store, message, now=None):
     result={"observed_at":now.isoformat(),
         "disclaimer":"Rankings describe KST research hypotheses, NOT win probability or executable prices."}
     symbols=_symbols(message)
+    if not symbols or "SPY" in symbols or "spx" in message.lower():
+        result["weekly_trend_research_hypothesis"] = dict(WEEKLY_TREND_HYPOTHESIS)
     try:
         params={"underlying":"in.("+",".join(symbols)+")"} if symbols else {}
         opts=store.rows("kst_option_signals",select=(
