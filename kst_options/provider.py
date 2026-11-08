@@ -1,4 +1,4 @@
-import os,requests
+import os,time,requests
 class ProviderError(RuntimeError):
  def __init__(self,status_code):
   self.status_code=int(status_code)
@@ -10,9 +10,16 @@ class Provider:
   self.feed=os.getenv('OPTIONS_FEED','opra')
   if self.feed not in ('opra','indicative'):raise ValueError('OPTIONS_FEED must be opra or indicative')
  def get(self,path,params):
-  r=requests.get('https://data.alpaca.markets'+path,params={**params,**({'feed':self.feed} if '/snapshots/' in path or '/quotes/' in path else {})},headers=self.headers,timeout=30)
-  if not r.ok:raise ProviderError(r.status_code)
-  return r.json()
+  for attempt in range(3):
+   try:
+    r=requests.get('https://data.alpaca.markets'+path,params={**params,**({'feed':self.feed} if '/snapshots/' in path or '/quotes/' in path else {})},headers=self.headers,timeout=(5,20))
+   except (requests.Timeout,requests.ConnectionError):
+    if attempt==2:raise RuntimeError('Alpaca data transport unavailable') from None
+    time.sleep(2**attempt);continue
+   if r.status_code in (429,502,503,504) and attempt<2:
+    time.sleep(2**attempt);continue
+   if not r.ok:raise ProviderError(r.status_code)
+   return r.json()
  def chain(self,symbol,lo,hi):
   params={'expiration_date_gte':str(lo),'expiration_date_lte':str(hi),'limit':1000}
   seen=set()
@@ -93,3 +100,4 @@ class Provider:
    if oi<0 or (now.date()-observed).days not in range(0,8):return None
   except (ValueError,TypeError,KeyError):return None
   return {'open_interest':oi,'date':str(observed)}
+

@@ -153,4 +153,18 @@ def market_research(store, message, now=None):
                          "time":row.get("created_at"),"url":None})
     except Exception:
         result["technical_setups"]={"status":"UNAVAILABLE","reason":"KST technical signals unavailable"}
+    # Structural history is kept distinct from fresh entry quotes.
+    if not symbols or 'SPY' in symbols or 'spx' in message.lower() or any(w in message.lower() for w in ('trendline','weekly','historical trend')):
+        try:
+            hist_symbols=['^GSPC' if x=='SPX' else x for x in symbols] or ['^GSPC','SPY']
+            if 'spx' in message.lower() and '^GSPC' not in hist_symbols:hist_symbols.insert(0,'^GSPC')
+            events=store.rows('kst_trendline_events',symbol='in.('+','.join(hist_symbols)+')',order='bar_at.desc',limit=12)
+            result['historical_trendline_events']={'events':events,'source':'Source-reported historical OHLCV; rule-based linear trendlines. Historical replay, not verified predictive accuracy or an entry signal.'}
+        except Exception:
+            result['historical_trendline_events']={'status':'UNAVAILABLE','reason':'Historical collection/query unavailable; no trendline evidence invented'}
+        try:
+            result['collection_health']=store.rows('kst_collection_status',select='id,status,last_attempt_at,last_finished_at,last_success_at,data_as_of,rows_saved,message',limit=40)
+        except Exception:
+            result['collection_health']={'status':'UNAVAILABLE'}
     return result,refs
+

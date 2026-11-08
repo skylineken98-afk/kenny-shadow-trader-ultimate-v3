@@ -16,11 +16,16 @@ def safe_link(value):
   return u.scheme=='https' and bool(u.hostname) and not u.username and not u.password and u.port in (None,443)
  except (ValueError,TypeError):return False
 
+class FinnhubError(RuntimeError):
+ def __init__(self,status):
+  self.status_code=status
+  super().__init__('Finnhub HTTP '+str(status))
+
 def finnhub(path,params,env=os.environ,http=None):
  key=env.get('FINNHUB_API_KEY')
  if not key:raise ValueError('Configure FINNHUB_API_KEY for earnings and company news')
  r=(http or requests.get)('https://finnhub.io/api/v1/'+path,params=params,headers={'X-Finnhub-Token':key},timeout=20,allow_redirects=False)
- if not r.ok:raise RuntimeError('Market provider unavailable; check credentials, quota and entitlement')
+ if not r.ok:raise FinnhubError(r.status_code)
  data=r.json()
  if isinstance(data,dict) and 'error' in data:raise RuntimeError('Market provider rejected the request')
  return data
@@ -113,3 +118,4 @@ def enrich_earnings(store,symbol,now):
    if q:details['expected_move']=expected_move(provider.chain(symbol,day,day+timedelta(days=15)),(q[0]+q[1])/2,day,row['timing'],now)
  except Exception:details['options_status']='UNAVAILABLE'
  store.patch('kst_earnings',row['id'],{'details':details})
+
