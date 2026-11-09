@@ -31,7 +31,7 @@ def test_bullish_entry_only_on_confirmed_momentum():
     assert result["side"] == "CALL"
     result = opening_entry(t(9,32), bars=bars(), hourly_trend="BEARISH",
                            zone_side="BULLISH", reward_risk=1.5, fresh_quote=True)
-    assert result["action"] == "SKIP"
+    assert result["side"] == "CALL"  # upward price momentum overrides bearish context
 
 
 def test_bearish_entry():
@@ -63,3 +63,19 @@ def test_timezone_required():
     except ValueError:
         return
     assert False, "naive datetimes must be rejected"
+
+
+def test_put_wins_despite_bullish_higher_timeframes():
+    result = opening_entry(t(9,32), bars=bars(False), hourly_trend="BULLISH",
+                           zone_side="BULLISH", reward_risk=1.5, fresh_quote=True)
+    assert result["action"] == "ENTRY_CANDIDATE"
+    assert result["side"] == "PUT"
+
+
+def test_mixed_momentum_stays_out():
+    mixed = bars()
+    mixed[-1] = {"high": 100.2, "low": 99.8, "close": 100,
+                 "volume": 500, "vwap": 100}
+    result = opening_entry(t(9,32), bars=mixed, hourly_trend="BULLISH",
+                           zone_side="BULLISH", reward_risk=1.5, fresh_quote=True)
+    assert result["action"] == "SKIP"
