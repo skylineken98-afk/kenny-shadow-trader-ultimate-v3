@@ -1,7 +1,7 @@
 """Opening-momentum SPX paper-trade decision rules. No broker access or scheduler.
 
-Caller supplies completed 1m SPX bars, independently confirmed 1H/15m
-trend/zone, and real timestamped option quotes. A decision is NOT a fill.
+Caller supplies completed 1m SPX bars, optional 1H/15m context,
+and independently verified option quotes. A decision is NOT a fill.
 All clock times use America/New_York (DST-aware).
 """
 from datetime import datetime, time
@@ -32,8 +32,8 @@ def opening_entry(now, *, bars, hourly_trend, zone_side, reward_risk,
     """Return direction and reason; never asserts a paper or broker fill.
 
     bars: >= 22 completed 1m candle dicts with high/low/close/volume/vwap.
-    hourly_trend and zone_side: 'BULLISH' or 'BEARISH', calculated by
-    independent completed 1H and 15m data producers.
+    hourly_trend and zone_side are context only, NOT directional vetoes.
+    Scoring compares bullish and bearish 1m momentum; neither is forced.
     """
     now = _clock(now)
     if now.weekday() >= 5 or not FIRST_ENTRY <= now.time().replace(tzinfo=None) < CUTOFF:
@@ -67,17 +67,25 @@ def opening_entry(now, *, bars, hourly_trend, zone_side, reward_risk,
         return value
     fast = ema(closes, 9)
     slow = ema(closes, 21)
-    bullish = (hourly_trend == zone_side == "BULLISH"
-               and fast > slow and closes[-1] > float(curr["vwap"])
-               and closes[-1] > float(prior["high"]))
-    bearish = (hourly_trend == zone_side == "BEARISH"
-               and fast < slow and closes[-1] < float(curr["vwap"])
-               and closes[-1] < float(prior["low"]))
-    if bullish:
-        return {"action": "ENTRY_CANDIDATE", "side": "CALL", "reason": "confirmed_bull_momentum"}
-    if bearish:
-        return {"action": "ENTRY_CANDIDATE", "side": "PUT", "reason": "confirmed_bear_momentum"}
-    return {"action": "SKIP", "reason": "momentum_unconfirmed"}
+    # Up/down scores are symmetric; the stronger confirmed price momentum wins.
+    # 1H/15m context is logged for later analysis, not used as a veto.
+    upside = sum((fast > slow,
+                  closes[-1] > float(curr["vwap"]),
+                  closes[-1] > float(prior["high"]),
+                  closes[-1] > closes[-2]))
+    downside = sum((fast < slow,
+                    closes[-1] < float(curr["vwap"]),
+                    closes[-1] < float(prior["low"]),
+                    closes[-1] < closes[-2]))
+    context = {"hourly_trend": hourly_trend, "zone_side": zone_side,
+               "call_score": upside, "put_score": downside}
+    if upside >= 3 and upside > downside:
+        return {"action": "ENTRY_CANDIDATE", "side": "CALL",
+                "reason": "upside_momentum_stronger", **context}
+    if downside >= 3 and downside > upside:
+        return {"action": "ENTRY_CANDIDATE", "side": "PUT",
+                "reason": "downside_momentum_stronger", **context}
+    return {"action": "SKIP", "reason": "no_clear_momentum_leader", **context}
 
 
 def opening_exit(now, *, side, entry_ask, latest_bid, fast_ema, slow_ema,
