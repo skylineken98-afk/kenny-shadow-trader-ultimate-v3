@@ -59,7 +59,7 @@ def test_weakening_and_stop_and_hard_exit():
 
 def test_timezone_required():
     try:
-        opening_entry(datetime(2026,11,9,9,32), bars=[])
+        opening_entry(datetime(2026,11,9,9,32), bars=[], hourly_trend='BULLISH', zone_side='BULLISH', reward_risk=1.5)
     except ValueError:
         return
     assert False, "naive datetimes must be rejected"
