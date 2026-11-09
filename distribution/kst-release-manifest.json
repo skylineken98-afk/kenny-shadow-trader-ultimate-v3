@@ -1,0 +1,79 @@
+{
+  "name": "KST Unified Distribution",
+  "version": "0.1.0-rc0",
+  "release_status": "PREVIEW_NOT_PRODUCTION_READY",
+  "assets": [
+    "options",
+    "stocks",
+    "spot_crypto",
+    "futures_signals_research",
+    "private_futures_simulation"
+  ],
+  "modules": [
+    {
+      "id": "core_research",
+      "scope": "options/stocks/crypto",
+      "status": "existing_beta",
+      "public": true,
+      "execution": false
+    },
+    {
+      "id": "futures_signal_alerts",
+      "path": "core/nq_signal_worker.py",
+      "status": "integration_pending",
+      "public": true,
+      "execution": false,
+      "requires": [
+        "licensed_cme_feed",
+        "session_ohlcv",
+        "telegram_credentials",
+        "supabase_migration",
+        "authenticated_ui"
+      ]
+    },
+    {
+      "id": "private_futures",
+      "path": "private_futures/risk_guard.py",
+      "status": "simulation_guard_only",
+      "public": false,
+      "execution": false,
+      "requires": [
+        "windows_vps",
+        "ninjatrader_sim101",
+        "licensed_quotes",
+        "sim_only_adapter",
+        "private_auth"
+      ]
+    },
+    {
+      "id": "apex",
+      "status": "future_not_configured",
+      "public": false,
+      "execution": false
+    },
+    {
+      "id": "chatgpt_claude_connectors",
+      "status": "existing_separate_work_needs_auth_review",
+      "execution": false
+    }
+  ],
+  "default_features": {
+    "futures_signal_worker": false,
+    "private_futures_simulation": false,
+    "private_live_orders": false,
+    "apex_integration": false,
+    "public_futures_redistribution": false,
+    "live_options_orders": false
+  },
+  "distribution_checklist": [
+    "run_all_tests",
+    "verify_auth_and_cross_user_isolation",
+    "confirm_market_data_entitlements",
+    "validate_ui_and_links",
+    "configure_secret_store",
+    "validate_persistent_queue",
+    "run_replay_and_forward_paper",
+    "verify_plans_and_payments",
+    "manual_release_approval"
+  ]
+}
