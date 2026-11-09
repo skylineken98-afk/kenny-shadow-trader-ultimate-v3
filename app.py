@@ -128,6 +128,9 @@ with tabs[8]:
     st.dataframe(pd.DataFrame(fetch('news_articles',100)),use_container_width=True)
     st.subheader('Recent classifications');st.dataframe(pd.DataFrame(fetch('news_analysis',50)),use_container_width=True)
 with tabs[9]:
+    from kst_pnl_panel import render_live as show_kst_contract_pnl
+    show_kst_contract_pnl(st, fetch)
+    st.divider()
     st.subheader('Simulated stock / spot-crypto positions — NOT brokerage orders')
     st.caption('Options are researched in 0DTE, Swings, LEAPS and Request a Signal. Option-contract paper fills are not supported by this simplified ledger.')
     st.dataframe(pd.DataFrame(fetch('paper_trades',100)),use_container_width=True)
