@@ -61,12 +61,12 @@ with tabs[0]:
         else:st.info('No stored signals yet.')
 
 def explore(kind,preset):
-    st.caption(f'{kind} · Candles, levels, and trend visualization (underlying market).')
+    st.caption(f'{kind} · Price momentum and volume research. Candles are visual context, not required timeframe alignment.')
     sym=st.text_input('Ticker to inspect',preset,key='ticker_'+kind).upper().strip()
     if sym:
         show_chart(sym,kind)
         with st.expander('Technical scenario (not an options premium recommendation)'):
-            if st.button('Evaluate multi-timeframe setup',key='analyze_'+kind):
+            if st.button('Evaluate price momentum + volume',key='analyze_'+kind):
                 a=confluence(sym)
                 st.write('Status:',a.get('status'),'· Bias:',a.get('side','WAIT'))
                 if a.get('status')=='SETUP':
@@ -85,7 +85,7 @@ with tabs[6]:
     with c1:budget=st.number_input('Maximum 1-contract cost ($)',5,3000,100,5,key='universe_budget')
     with c2:sample=st.selectbox('Listings screened per pass',[120,400,800,1000],index=1,key='scan_breadth')
     with c3:rotation=st.number_input('Universe rotation offset',min_value=0,value=0,step=400,key='scan_offset')
-    st.caption('Lower-priced contracts are not automatically rejected. Prices still require real vendor quotes, compatible expirations, and a confirmed setup. Limited universe scans and missing Alpaca credentials can return zero results; view notices below.')
+    st.caption('No 4H/1H/5M gate: underlying momentum + volume decide direction. Real option quotes, valid expiration, freshness and budget remain mandatory. Check provider notices when no contracts appear.')
     if st.button('🔎 Scan market for Top 3 0DTE + Swings + LEAPS',type='primary',key='request_options'):
         with st.spinner('Discovering listings and ranking liquid underlyings...'):
             all_tickers,listing_notes=listed_symbols()
@@ -100,7 +100,7 @@ with tabs[6]:
         st.caption(f'Listing universe: {listed_count:,} symbols · this pass up to {sample} symbols starting at {rotation:,} · deeper checks: {len(screened)}. Scores are liquidity/fit, NOT predicted profitability. For full coverage, run consecutive passes across the entire universe.')
         for group in CATEGORIES:
             st.markdown(f'### {group} — {len(found[group])} / 3 qualifying contracts')
-            if not found[group]:st.warning('No contract passed this budget AND the current technical/data rules. This does not mean cheap contracts cannot win. Check market-data notices, coverage and broaden the scan; no fabricated substitutes.')
+            if not found[group]:st.warning('No matching contract passed current momentum/volume, budget and market-data checks. Cheap contracts can still win, but none can be invented. Check notices and scanned universe.')
             for i,rec in enumerate(found[group]):
                 with st.container(border=True):
                     sym=rec['ticker']
