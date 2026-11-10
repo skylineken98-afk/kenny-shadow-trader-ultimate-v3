@@ -3,6 +3,7 @@ from datetime import datetime, date, timezone, timedelta
 from zoneinfo import ZoneInfo
 import math
 from core.flow_intelligence import alignment_bonus
+from core.affordable_options import screening_policy, price_quality
 
 CATEGORIES = ('0DTE', 'Swings', 'LEAPS')
 
@@ -37,9 +38,10 @@ def rank_row(raw, ticker, expiration, right, underlying, direction, budget, now,
     vol=to_float(raw.get('volume'),0); oi=to_float(raw.get('openInterest'),0)
     contract=raw.get('contractSymbol')
     if not isinstance(contract,str) or not contract.strip() or strike is None:return None
-    if bid is None or ask is None or bid<=0 or ask<=bid:return None
+    if bid is None or ask is None:return None
+    quality, rejection = price_quality(bid, ask, budget, vol, oi)
+    if rejection:return None
     spread=(ask-bid)/((ask+bid)/2)
-    if spread>0.20 or vol<5 or oi<50 or ask*100>budget:return None
     ts=quote_timestamp(raw.get('lastTradeDate'))
     # Vendor lastTradeDate is a trade timestamp, not a timestamp for the current bid/ask quote.
     # Do not present stale option snapshots as current executable quotations.
@@ -48,13 +50,15 @@ def rank_row(raw, ticker, expiration, right, underlying, direction, budget, now,
     change=to_float(raw.get('change'))
     # Quote quality/contract liquidity/strike proximity rather than fabricated win probability.
     proximity=abs(strike-underlying)/underlying if underlying>0 else 1
-    score=round(100*(0.40*(1-spread/0.20)+0.30*min(vol/250,1)+0.20*min(oi/2000,1)+0.10*max(0,1-min(proximity/0.15,1))),2)
+    allowed_spread=screening_policy(budget)['max_spread_pct']/100
+    score=round(100*(0.40*max(0,1-spread/allowed_spread)+0.30*min(vol/250,1)+0.20*min(oi/2000,1)+0.10*max(0,1-min(proximity/0.15,1))),2)
     return {'ticker':ticker,'contract':contract,'expiration':expiration,'right':right.upper(), 'strike':strike,
         'bid':bid,'ask':ask,'last':price,'change':change,'percent_change':pct,
         'high':to_float(raw.get('dayHigh')),'low':to_float(raw.get('dayLow')),
         'open':to_float(raw.get('open')),'previous_close':None,
         'volume':int(vol),'open_interest':int(oi),'spread_pct':round(spread*100,1),
-        'cost':round(ask*100,2),'price_band':('budget' if ask*100<=50 else 'standard'),'rank_score':round(score + alignment_bonus(flow, direction), 2), 'base_contract_score':score, 'flow':flow, 'quote_warning':'Indicative bid/ask; vendor does not supply a verified quote timestamp',
+        'cost':round(ask*100,2),'price_band':quality['premium_band'],
+        'liquidity_label':quality['liquidity_label'], 'estimated_roundtrip_spread_cost':quality['estimated_roundtrip_spread_cost'], 'verified_executable':False,'rank_score':round(score + alignment_bonus(flow, direction), 2), 'base_contract_score':score, 'flow':flow, 'quote_warning':'Indicative bid/ask; vendor does not supply a verified quote timestamp',
         'last_trade_at':ts.isoformat(),'data_checked_at':now.isoformat(),'direction':direction,
         'entry_note':'No executable entry/stop/target without an option-premium risk model'}
 
@@ -76,8 +80,9 @@ def discover_contracts(tickers, budget=300, now=None, ticker_factory=None, analy
         def flow_provider(symbol):
             return measure_flow(history(symbol, period='2mo', interval='1d'))
     results={group:[] for group in CATEGORIES}; notices=[]
+    policy=screening_policy(budget)
     budget=float(budget)
-    if not 5<=budget<=3000:raise ValueError('Budget must be between $5 and $3000')
+    notices.append(f'Budget ${budget:g}: price screening allows up to {policy["max_spread_pct"]:g}% spreads, volume >= {policy["min_volume"]}, OI >= {policy["min_oi"]}; speculative candidates are flagged, not asserted profitable')
     unique=list(dict.fromkeys(str(t).upper().strip() for t in tickers if str(t).strip()))
     for symbol in unique:
         try:
