@@ -3,6 +3,7 @@ import math,re
 from decimal import Decimal, InvalidOperation
 from datetime import datetime,timedelta,timezone
 from zoneinfo import ZoneInfo
+from .greeks_selection import analyze_contract_greeks, rank_with_greeks
 NY=ZoneInfo('America/New_York')
 BASE=[0.55,0.30,0.15]
 BUDGETS=[30,50,100,200,500,1000,3000]
@@ -41,7 +42,7 @@ def candidate(contract,snapshot,now,feed,weights=BASE,relaxed=False):
  if delta is None or not ((.15 if relaxed else .20)<=abs(delta)<=(.85 if relaxed else .80)):return None
  # Structural quality only; never a probability of profit.
  f=[max(0,1-spread/.15),max(0,1-abs(abs(delta)-.5)/.3),1-min(1,ask*100/3000)]
- return dict(risk_snapshot={'exit_policy':'profit-lock-v1','greeks':{k:num((snapshot.get('greeks') or {}).get(k)) for k in ('delta','gamma','theta','vega','rho')},'implied_volatility':num(snapshot.get('impliedVolatility')),'observed_at':stamp(now),'source':'Provider snapshot. Greek and IV timestamps/units are not independently verified; quote time is not a Greek timestamp.'},quality_label='WATCHLIST' if relaxed else 'QUALIFIED',contract=contract,underlying=match[1],expiration=str(exp),option_type='CALL' if match[3]=='C' else 'PUT',strike=int(match[4])/1000,category=cat,entry_ask=ask,entry_bid=bid,quote_at=stamp(t),feed=feed,features=f,score=score(f,weights))
+ return dict(risk_snapshot={'exit_policy':'profit-lock-v1','greeks_analysis':analyze_contract_greeks(snapshot,option_type='CALL' if match[3]=='C' else 'PUT',entry_ask=ask,underlying_price=(snapshot.get('underlyingPrice') or snapshot.get('underlying_price')),now=now),'greeks':{k:num((snapshot.get('greeks') or {}).get(k)) for k in ('delta','gamma','theta','vega','rho')},'implied_volatility':num(snapshot.get('impliedVolatility')),'observed_at':stamp(now),'source':'Provider snapshot. Greek and IV timestamps/units are not independently verified; quote time is not a Greek timestamp.'},quality_label='WATCHLIST' if relaxed else 'QUALIFIED',contract=contract,underlying=match[1],expiration=str(exp),option_type='CALL' if match[3]=='C' else 'PUT',strike=int(match[4])/1000,category=cat,entry_ask=ask,entry_bid=bid,quote_at=stamp(t),feed=feed,features=f,score=score(f,weights))
 def score(f,w):return round(100*sum(a*b for a,b in zip(f,w)),3)
 def deadline(c,now):
  horizon={'0DTE':timedelta(hours=1),'Swings':timedelta(days=1),'LEAPS':timedelta(days=7)}[c['category']]
@@ -95,7 +96,10 @@ def affordable(ask,budget,fee=0):
 def requested_choices(candidates,category,budget,fee=0):
  from .universe import diverse_choices
  choices=[c for c in candidates if c['category']==category and affordable(c['entry_ask'],budget,fee)]
- return diverse_choices(choices,3)
+ # Greek-adjusted ranking is advisory; maintain the original score and diverse contract picks.
+ ranked=rank_with_greeks(choices)
+ prioritized=[dict(c,score=c['greeks_adjusted_score'],structural_score=c.get('score')) for c in ranked]
+ return diverse_choices(prioritized,3)
 
 def context_label(contract,setup,now):
  if not setup or setup.get('status')!='SETUP':return 'STRUCTURAL_ONLY'
