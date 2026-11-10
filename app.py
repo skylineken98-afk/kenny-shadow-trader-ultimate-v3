@@ -61,12 +61,12 @@ with tabs[0]:
         else:st.info('No stored signals yet.')
 
 def explore(kind,preset):
-    st.caption(f'{kind} · Candles, levels, and trend visualization (underlying market).')
+    st.caption(f'{kind} · Price momentum and volume research. Candles are visual context, not required timeframe alignment.')
     sym=st.text_input('Ticker to inspect',preset,key='ticker_'+kind).upper().strip()
     if sym:
         show_chart(sym,kind)
         with st.expander('Technical scenario (not an options premium recommendation)'):
-            if st.button('Evaluate multi-timeframe setup',key='analyze_'+kind):
+            if st.button('Evaluate price momentum + volume',key='analyze_'+kind):
                 a=confluence(sym)
                 st.write('Status:',a.get('status'),'· Bias:',a.get('side','WAIT'))
                 if a.get('status')=='SETUP':
@@ -76,19 +76,22 @@ for idx,kind,default in [(1,'0DTE','SPY'),(2,'Swings','IWM'),(3,'LEAPS','QQQ'),(
 with tabs[6]:
     from core.request_signals import discover_contracts,CATEGORIES
     from core.v1_primary_scanner import discover_v1_contracts
+    from core.affordable_universe import add_priority_underlyings
     st.subheader('🎯 Full-universe rotating discovery · best contracts')
     scanner_mode=st.radio('Contract selection engine', ['V1 original scoring (primary; Alpaca)', 'V3 secondary research (Yahoo)'], index=0, horizontal=True)
-    st.caption('V1: original delta, bid/ask and spread scoring; raw ranking is preserved. Scores display at most 100 and do not represent win probability.')
-    st.caption('Market-wide DISCOVERY ➜ daily liquidity prescreen ➜ 4H/1H/5M alignment ➜ actual option chain ➜ ranked Top 3. No single required ticker.')
+    st.caption('Budget tiers ($50 / $100 / $200): cheaper premiums are eligible, but are marked speculative when spreads or liquidity warrant. Scores are not win probabilities.')
+    st.caption('IWM, SPY, QQQ and other ETF/lower-priced watchlist names are always scanned alongside rotating liquidity candidates. Contract prices, not stock share prices, decide $50/$100/$200 affordability.')
     c1,c2,c3=st.columns(3)
     with c1:budget=st.number_input('Maximum 1-contract cost ($)',5,3000,100,5,key='universe_budget')
     with c2:sample=st.selectbox('Listings screened per pass',[120,400,800,1000],index=1,key='scan_breadth')
     with c3:rotation=st.number_input('Universe rotation offset',min_value=0,value=0,step=400,key='scan_offset')
-    st.caption('Includes lower-priced stocks down to $0.50; they must still have listed options and pass liquidity and chart filters. One pass does NOT cover the full universe; rotate through passes to widen discovery. Delayed public data can throttle.')
+    st.caption('No 4H/1H/5M gate: underlying momentum + volume decide direction. Real option quotes, valid expiration, freshness and budget remain mandatory. Check provider notices when no contracts appear.')
     if st.button('🔎 Scan market for Top 3 0DTE + Swings + LEAPS',type='primary',key='request_options'):
         with st.spinner('Discovering listings and ranking liquid underlyings...'):
             all_tickers,listing_notes=listed_symbols()
             screened,screen_notes=shortlist(all_tickers,sample_size=sample,shortlist_size=40,offset=rotation,min_price=0.50,min_dollar_volume=250_000)
+            screened=add_priority_underlyings(screened)
+            screen_notes.append('Priority options underlyings (including IWM) always included in the candidate scan; actual contracts still must satisfy quote, setup and cost rules.')
         with st.spinner(f'Checking options on {len(screened)} liquid candidates...'):
             found,chain_notes=(discover_v1_contracts(screened,budget) if scanner_mode.startswith('V1') else discover_contracts(screened,budget))
         st.session_state['requested_options']=(found,listing_notes+screen_notes+chain_notes,screened,len(all_tickers),scanner_mode)
@@ -97,7 +100,7 @@ with tabs[6]:
         st.caption(f'Listing universe: {listed_count:,} symbols · this pass up to {sample} symbols starting at {rotation:,} · deeper checks: {len(screened)}. Scores are liquidity/fit, NOT predicted profitability. For full coverage, run consecutive passes across the entire universe.')
         for group in CATEGORIES:
             st.markdown(f'### {group} — {len(found[group])} / 3 qualifying contracts')
-            if not found[group]:st.warning('No verifiable contracts met every rule. Increase scan breadth or rotate the universe; no fabricated substitutes.')
+            if not found[group]:st.warning('No matching contract passed current momentum/volume, budget and market-data checks. Cheap contracts can still win, but none can be invented. Check notices and scanned universe.')
             for i,rec in enumerate(found[group]):
                 with st.container(border=True):
                     sym=rec['ticker']
@@ -110,6 +113,7 @@ with tabs[6]:
                     st.caption(f"Volume: {rec['volume']:,} · OI: {rec['open_interest']:,} · Spread: {rec['spread_pct']:.1f}% · Last option trade: {rec['last_trade_at']}" if rec.get('volume') is not None and rec.get('open_interest') is not None else f"V1 snapshot · Spread: {rec['spread_pct']:.1f}% · Delta: {rec.get('delta') if rec.get('delta') is not None else 'N/A'} · Quote timestamp: {rec['last_trade_at']}")
                     with st.expander(f'📈 {sym} {"5-minute" if group=="0DTE" else "daily" if group=="Swings" else "weekly"} chart with key levels',expanded=True):
                         show_chart(sym,group)
+                    st.caption(f"Risk tier: {rec.get('liquidity_label', 'UNVERIFIED')} · Estimated round-trip bid/ask friction: ${rec.get('estimated_roundtrip_spread_cost', 0):.2f} per standard 100-share contract (before commissions/slippage).")
                     st.caption(rec.get('quote_warning',''))
                     st.caption('Option premium OHLC and valid premium stops/targets are unavailable from this feed. The chart shows UNDERLYING movement, not the contract price. Confirm quotes before decisions.')
         with st.expander(f'Market-data and screening notices ({len(notes)})'):

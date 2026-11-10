@@ -33,54 +33,18 @@ def levels(df,interval_minutes=None):
     quality=trend_quality(df,trend)
     return {'trend_quality':quality,'candle_evidence':candle_evidence,'price':price,'ema20':float(ema20.iloc[-1]),'ema50':float(ema50.iloc[-1]),'ema200':float(ema200.iloc[-1]),'atr':atr,'rvol':rvol,'support':low,'resistance':high,'trend':trend,'volume':float(vol.iloc[-1])}
 
-def _trend_confluence(symbol):
-    from datetime import datetime, timezone
-    scan_now=datetime.now(timezone.utc)
-    frames={}
-    for key,period,interval in [('4h','180d','1h'),('1h','60d','1h'),('5m','5d','5m')]:
-        try:
-            df=history(symbol,period,interval)
-            if key=='4h' and not df.empty:
-                df=df.resample('4h').agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'}).dropna()
-            minutes={'4h':240,'1h':60,'5m':5}[key]
-            df=df.loc[df.index+pd.Timedelta(minutes=minutes)<=pd.Timestamp(scan_now)]
-            frames[key]=levels(df,minutes)
-            if frames[key] is not None:
-                frames[key]['bar_closed_at']=(df.index[-1]+pd.Timedelta(minutes=minutes)).isoformat()
-        except Exception: frames[key]=None
-    if any(v is None for v in frames.values()):return {'symbol':symbol,'status':'INSUFFICIENT_DATA','frames':frames}
-    directions=[frames[k]['trend'] for k in ('4h','1h','5m')]
-    aligned=all(x=='BULLISH' for x in directions) or all(x=='BEARISH' for x in directions)
-    f=frames['5m'];side=directions[0] if aligned else 'WAIT'
-    quality=f.get('trend_quality', {})
-    aligned=aligned and quality.get('passes', False)
-    if not aligned: side='WAIT'
-    stop=f['price']-1.5*f['atr'] if side=='BULLISH' else f['price']+1.5*f['atr'] if side=='BEARISH' else None
-    target=f['price']+3*f['atr'] if side=='BULLISH' else f['price']-3*f['atr'] if side=='BEARISH' else None
-    return {'symbol':symbol,'status':'SETUP' if aligned else 'WAIT','side':side,'frames':frames,'entry':f['price'] if aligned else None,'stop':stop,'target':target,'confidence_label':'RULE_BASED_ONLY'}
-
-
 def confluence(symbol):
-    """Prefer the confirmed 4h/15m sweep/BOS/FVG setup; retain trend setups."""
+    """Public options/stocks/crypto KST default: volume-confirmed price momentum.
+
+    No 4H / 1H / 5M alignment, FVG or trend-structure prerequisite.
+    One-minute bars are observations, NOT a multi-timeframe entry rule.
+    """
+    from core.momentum_volume import qualify
     from datetime import datetime, timezone
-    from core.liquidity_fvg import liquidity_fvg_setup
-    now = datetime.now(timezone.utc)
     try:
-        hourly = history(symbol, '60d', '1h')
-        # Drop forming source hours before aggregation. Require four source bars
-        # so partial session buckets never masquerade as complete 4h context.
-        hourly = hourly.loc[hourly.index + pd.Timedelta(hours=1) <= pd.Timestamp(now)]
-        groups = hourly.resample('4h')
-        context = groups.agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'})
-        context = context.loc[groups.Close.count() == 4].dropna()
-        setup = liquidity_fvg_setup(context, history(symbol, '5d', '15m'), now)
-        if setup['status'] == 'SETUP':
-            result = _trend_confluence(symbol)
-            result.update(setup)
-            result['symbol'] = symbol
-            return result
-    except (ValueError, TypeError, KeyError, AttributeError):
-        setup = {'status':'UNAVAILABLE', 'strategy':'LIQUIDITY_SWEEP_BOS_FVG'}
-    result = _trend_confluence(symbol)
-    result['liquidity_fvg'] = setup
-    return result
+        candles = history(symbol, period='5d', interval='1m')
+        return qualify(candles, symbol=symbol, now=datetime.now(timezone.utc),
+                       bar_minutes=1, max_stale_minutes=15)
+    except Exception as exc:
+        return {'symbol':symbol,'status':'INSUFFICIENT_DATA','side':'WAIT',
+                'strategy':'MOMENTUM_VOLUME','reason':type(exc).__name__}
