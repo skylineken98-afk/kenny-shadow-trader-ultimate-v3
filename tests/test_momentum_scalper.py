@@ -9,7 +9,7 @@ def bars(bear=False):
     out = []
     for i in range(8):
         c = (100 - i * .05) if bear else (100 + i * .05)
-        out.append({"t": f"2026-11-10T14:{i:02d}:00Z", "c": c,
+        out.append({"t": f"2026-11-10T14:{37+i:02d}:00Z", "c": c,
                     "h": c + .10, "l": c - .10,
                     "v": 100 if i < 5 else 500, "complete": True})
     out[-1]["c"] = 98 if bear else 102
