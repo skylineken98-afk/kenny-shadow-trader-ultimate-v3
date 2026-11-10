@@ -19,7 +19,12 @@ def cycle():
             row={'id':str(uuid.uuid4()),'created_at':now(),'symbol':sym,'status':s['status'],'side':s.get('side','WAIT'),'entry':s.get('entry'),'stop':s.get('stop'),'target':s.get('target'),'details':s,'source':'rule_based_scan','execution_state':'NONE'}
             r=insert('ultimate_signals',row);logging.info('%s %s %s',sym,s['status'],r.get('ok'))
         except Exception:logging.exception('scan failure %s',sym)
-if __name__=='__main__':
+if __name__=='__main__' and os.getenv('RAILWAY_SERVICE_NAME') == 'kst-momentum-alerts':
+    # Isolated service uses the existing Railway default start command, but
+    # must never duplicate the primary market scanner or place orders.
+    from kst_options.momentum_alert_worker import main as telegram_momentum_main
+    telegram_momentum_main()
+elif __name__=='__main__':
     import threading
     from kst_pro.ops import heartbeat_loop
     threading.Thread(target=heartbeat_loop,args=('scanner',),daemon=True).start()
