@@ -88,8 +88,8 @@ def discover_contracts(tickers, budget=300, now=None, ticker_factory=None, analy
         try:
             analysis=analyzer(symbol)
             if analysis.get('status')!='SETUP' or analysis.get('side') not in ('BULLISH','BEARISH'):
-                notices.append(f'{symbol}: No aligned 4H/1H/5M setup; skipped');continue
-            underlying=to_float((analysis.get('frames',{}).get('5m') or {}).get('price'))
+                notices.append(f'{symbol}: no fresh momentum-plus-volume setup; skipped');continue
+            underlying=to_float(analysis.get('entry') or analysis.get('price'))
             if not underlying or underlying<=0:continue
             # Missing flow data does not fabricate money flows or block otherwise valid ideas.
             try: flow = flow_provider(symbol)
