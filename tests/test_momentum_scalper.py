@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from core.momentum_scalper import plan_momentum_scalp, evaluate_scalp_exit
 
-NOW = datetime(2026, 11, 10, 15, 15, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 10, 14, 45, tzinfo=timezone.utc)
 CALL = "SPY261110C00750000"
 PUT = "SPY261110P00750000"
 
@@ -9,7 +9,7 @@ def bars(bear=False):
     out = []
     for i in range(8):
         c = (100 - i * .05) if bear else (100 + i * .05)
-        out.append({"t": f"2026-11-10T15:{i:02d}:00Z", "c": c,
+        out.append({"t": f"2026-11-10T14:{i:02d}:00Z", "c": c,
                     "h": c + .10, "l": c - .10,
                     "v": 100 if i < 5 else 500, "complete": True})
     out[-1]["c"] = 98 if bear else 102
