@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import math
 import os
 from core.request_signals import CATEGORIES, dte_group
+from core.affordable_options import screening_policy, price_quality
 
 
 def number(value):
@@ -20,8 +21,7 @@ def number(value):
 def original_v1_score(ask, spread_pct, delta, max_premium):
     """Original Oct-5-era formula, with unchanged raw score for sort order."""
     score = 100.0 - spread_pct * 2
-    if ask < 0.20:
-        score -= 20
+    # Do not penalize cheap premiums solely for being cheap; penalize spread risk instead.
     if ask <= max_premium:
         score += 5
     if delta is not None:
@@ -39,7 +39,7 @@ def bounded_score(raw):
     return round(max(0., min(100., raw)), 1)
 
 
-def snapshot_candidate(contract, snapshot, budget, today, now=None, max_spread=15.):
+def snapshot_candidate(contract, snapshot, budget, today, now=None, max_spread=None):
     """V1 bid/ask/spread and delta filter, plus explicit quote-timestamp guard.
     Valid Alpaca option OCC symbol is required. Missing timestamps are labeled
     unverified (not described as live quotes).
@@ -60,10 +60,13 @@ def snapshot_candidate(contract, snapshot, budget, today, now=None, max_spread=1
         return None
     bid = number(getattr(quote, 'bid_price', None))
     ask = number(getattr(quote, 'ask_price', None))
-    if bid is None or ask is None or bid <= 0 or ask <= bid or ask*100 > budget:
+    if bid is None or ask is None:
         return None
-    spread_pct = 100*(ask-bid)/((ask+bid)/2)
-    if spread_pct > max_spread:
+    quality, rejection = price_quality(bid, ask, budget)
+    if rejection:
+        return None
+    spread_pct = quality['spread_pct']
+    if max_spread is not None and spread_pct > max_spread:
         return None
     greeks = getattr(snapshot, 'greeks', None)
     delta = number(getattr(greeks, 'delta', None)) if greeks else None
@@ -92,6 +95,10 @@ def snapshot_candidate(contract, snapshot, budget, today, now=None, max_spread=1
         'rank_score':bounded_score(raw_score),'raw_rank_score':round(raw_score,3),
         'base_contract_score':bounded_score(raw_score),
         'last_trade_at':stamp_text, 'quote_warning':warning,
+        'liquidity_label':quality['liquidity_label'],
+        'premium_band':quality['premium_band'],
+        'estimated_roundtrip_spread_cost':quality['estimated_roundtrip_spread_cost'],
+        'verified_executable':False,
         'data_checked_at':now.isoformat(), 'source':'V1 Alpaca contract scanner'}
 
 
@@ -105,6 +112,8 @@ def discover_v1_contracts(tickers, budget=100, per_category=3, now=None,
     now = now or datetime.now(timezone.utc)
     today = now.astimezone(ZoneInfo('America/New_York')).date()
     notices=[]
+    policy=screening_policy(budget)
+    notices.append(f'Budget tier ${budget:g}: max spread {policy["max_spread_pct"]:g}%, minimum volume {policy["min_volume"]}, OI {policy["min_oi"]} when provided; low-premium candidates marked speculative')
     if client is None:
         key = os.getenv('ALPACA_API_KEY')
         secret = os.getenv('ALPACA_API_SECRET')
