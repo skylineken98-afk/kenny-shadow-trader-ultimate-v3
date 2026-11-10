@@ -62,7 +62,7 @@ def test_guardrails():
                                 open_positions=3)["status"] == "REJECTED"
     assert plan_momentum_scalp("SPY", bars(), CALL, quote(), equity=1000,
                                 day_start_equity=1000, budget=100,
-                                now=NOW.replace(hour=16))["status"] == "REJECTED"
+                                now=NOW.replace(hour=21))["status"] == "REJECTED"
 
 def test_trailing_stop_and_momentum_weakening():
     r = evaluate_scalp_exit("1", "1.32", peak_bid="1.6", momentum_confirmed=True)
@@ -72,3 +72,45 @@ def test_trailing_stop_and_momentum_weakening():
     r = evaluate_scalp_exit("1", "1.10", peak_bid="1.2", momentum_confirmed=False)
     assert r["status"] == "EXIT_CANDIDATE"
     assert evaluate_scalp_exit("1", "1.10", peak_bid="1.2", momentum_confirmed=None)["status"] == "NO_TRADE"
+
+
+def test_momentum_at_open_not_932_gate():
+    early = datetime(2026, 11, 10, 14, 31, 20, tzinfo=timezone.utc)
+    candles = [
+        {"t": "2026-11-10T14:29:00Z", "c": 100, "h": 100.10, "l": 99.90, "v": 100, "complete": True},
+        {"t": "2026-11-10T14:30:00Z", "c": 101, "h": 101.10, "l": 100.50, "v": 280, "complete": True},
+    ]
+    result = plan_momentum_scalp("SPY", candles, CALL, quote(now=early),
+                                 equity=1000, day_start_equity=1000,
+                                 budget=100, now=early)
+    assert result["status"] == "PAPER_CANDIDATE"
+    assert result["direction"] == "BULLISH"
+
+
+def test_amd_midday_momentum_does_not_require_higher_timeframe_alignment():
+    midday = datetime(2026, 11, 10, 16, 45, 20, tzinfo=timezone.utc)
+    candles = [
+        {"t": "2026-11-10T16:43:00Z", "c": 250, "h": 250.2, "l": 249.8, "v": 150, "complete": True},
+        {"t": "2026-11-10T16:44:00Z", "c": 251.5, "h": 251.7, "l": 250.9, "v": 450, "complete": True},
+    ]
+    result = plan_momentum_scalp("AMD", candles, "AMD261110C00250000",
+                                 quote(now=midday), equity=1000,
+                                 day_start_equity=1000, budget=100, now=midday)
+    assert result["status"] == "PAPER_CANDIDATE"
+    assert "no fixed candle timeframe" in result["momentum_method"]
+
+
+def test_one_candle_is_not_enough_and_reversal_selects_put():
+    now = datetime(2026, 11, 10, 17, 2, tzinfo=timezone.utc)
+    candles = [
+        {"t": "2026-11-10T17:00:00Z", "c": 100, "h": 100.1, "l": 99.9, "v": 100, "complete": True},
+        {"t": "2026-11-10T17:01:00Z", "c": 98, "h": 98.2, "l": 97.8, "v": 300, "complete": True},
+    ]
+    assert plan_momentum_scalp("SPY", candles[-1:], PUT, quote(now=now),
+                                equity=1000, day_start_equity=1000,
+                                budget=100, now=now)["status"] == "REJECTED"
+    result = plan_momentum_scalp("SPY", candles, PUT, quote(now=now),
+                                 equity=1000, day_start_equity=1000,
+                                 budget=100, now=now)
+    assert result["status"] == "PAPER_CANDIDATE"
+    assert result["direction"] == "BEARISH"
