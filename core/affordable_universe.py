@@ -1,10 +1,10 @@
 """Ensure affordable-option underlyings get reviewed without fabricating contracts.
 
-These tickers are candidates for scanning, not guaranteed inexpensive options.
+These tickers are candidates for scanning, not guaranteed inexpensive options.\nSPX/SPXW are deliberately NOT included here: an equity options chain\nprovider cannot be presumed to support cash-settled index options.
 Actual contract ask, quote timestamp, setup and liquidity still determine eligibility.
 """
 PRIORITY_UNDERLYINGS = (
-    "IWM", "SPY", "QQQ", "DIA", "XLF", "SLV", "GDX",
+    "SPY", "IWM", "QQQ", "NVDA", "AVGO", "AMD", "DIA", "XLF", "SLV", "GDX",
     "SOFI", "HOOD", "BAC", "F", "CCL", "AAL", "SNAP",
     "RIVN", "PFE", "NIO", "PLTR", "RIOT",
 )
