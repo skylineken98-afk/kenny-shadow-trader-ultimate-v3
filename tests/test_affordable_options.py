@@ -4,10 +4,18 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from core.affordable_options import screening_policy, price_quality
+from core.affordable_universe import add_priority_underlyings
 from core.request_signals import rank_row
 from core.v1_primary_scanner import snapshot_candidate, original_v1_score
 
 class AffordableOptionsTests(unittest.TestCase):
+    def test_iwm_is_always_scanned(self):
+        result = add_priority_underlyings(['AMD', 'SOFI', 'IWM'])
+        self.assertEqual(result.count('IWM'), 1)
+        self.assertIn('SPY', result)
+        self.assertIn('AMD', result)
+        self.assertLess(result.index('IWM'), result.index('AMD'))
+
     def test_budget_tiers(self):
         self.assertEqual(screening_policy(50)["max_spread_pct"],35)
         self.assertEqual(screening_policy(100)["max_spread_pct"],30)
