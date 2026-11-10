@@ -3,7 +3,7 @@ import json
 import pytest
 from core.opening_momentum_breakout import detect, paper_option_plan, backtest, append_performance
 
-NOW = datetime(2026, 11, 10, 14, 36, 30, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 10, 14, 35, 30, tzinfo=timezone.utc)
 
 def candles(bear=False):
     # One opening impulse, three restrained pullback candles, then a breakout.
