@@ -76,10 +76,11 @@ for idx,kind,default in [(1,'0DTE','SPY'),(2,'Swings','IWM'),(3,'LEAPS','QQQ'),(
 with tabs[6]:
     from core.request_signals import discover_contracts,CATEGORIES
     from core.v1_primary_scanner import discover_v1_contracts
+    from core.affordable_universe import add_priority_underlyings
     st.subheader('🎯 Full-universe rotating discovery · best contracts')
     scanner_mode=st.radio('Contract selection engine', ['V1 original scoring (primary; Alpaca)', 'V3 secondary research (Yahoo)'], index=0, horizontal=True)
     st.caption('Budget tiers ($50 / $100 / $200): cheaper premiums are eligible, but are marked speculative when spreads or liquidity warrant. Scores are not win probabilities.')
-    st.caption('Market-wide DISCOVERY ➜ daily liquidity prescreen ➜ 4H/1H/5M alignment ➜ actual option chain ➜ ranked Top 3. No single required ticker.')
+    st.caption('IWM, SPY, QQQ and other ETF/lower-priced watchlist names are always scanned alongside rotating liquidity candidates. Contract prices, not stock share prices, decide $50/$100/$200 affordability.')
     c1,c2,c3=st.columns(3)
     with c1:budget=st.number_input('Maximum 1-contract cost ($)',5,3000,100,5,key='universe_budget')
     with c2:sample=st.selectbox('Listings screened per pass',[120,400,800,1000],index=1,key='scan_breadth')
@@ -89,6 +90,8 @@ with tabs[6]:
         with st.spinner('Discovering listings and ranking liquid underlyings...'):
             all_tickers,listing_notes=listed_symbols()
             screened,screen_notes=shortlist(all_tickers,sample_size=sample,shortlist_size=40,offset=rotation,min_price=0.50,min_dollar_volume=250_000)
+            screened=add_priority_underlyings(screened)
+            screen_notes.append('Priority options underlyings (including IWM) always included in the candidate scan; actual contracts still must satisfy quote, setup and cost rules.')
         with st.spinner(f'Checking options on {len(screened)} liquid candidates...'):
             found,chain_notes=(discover_v1_contracts(screened,budget) if scanner_mode.startswith('V1') else discover_contracts(screened,budget))
         st.session_state['requested_options']=(found,listing_notes+screen_notes+chain_notes,screened,len(all_tickers),scanner_mode)
