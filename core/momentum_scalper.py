@@ -58,6 +58,10 @@ def plan_momentum_scalp(underlying, bars, contract, quote, *,
         signal = momentum_decision(underlying, bars)
         if signal.get("action") != "PAPER_CANDIDATE":
             return _reject(signal.get("reason", "No verified momentum setup"))
+        # Fail closed if the underlying chart is no longer current.
+        observed = datetime.fromisoformat(signal["observed_at"].replace("Z", "+00:00"))
+        if observed.tzinfo is None or not 0 <= (now - observed).total_seconds() <= 120:
+            return _reject("Stale or future-dated underlying candle")
         symbol = str(contract)
         if not OCC.fullmatch(symbol):
             return _reject("Invalid option OCC contract")
