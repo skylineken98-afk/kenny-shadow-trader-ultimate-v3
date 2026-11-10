@@ -78,13 +78,13 @@ with tabs[6]:
     from core.v1_primary_scanner import discover_v1_contracts
     st.subheader('🎯 Full-universe rotating discovery · best contracts')
     scanner_mode=st.radio('Contract selection engine', ['V1 original scoring (primary; Alpaca)', 'V3 secondary research (Yahoo)'], index=0, horizontal=True)
-    st.caption('V1: original delta, bid/ask and spread scoring; raw ranking is preserved. Scores display at most 100 and do not represent win probability.')
+    st.caption('Budget tiers ($50 / $100 / $200): cheaper premiums are eligible, but are marked speculative when spreads or liquidity warrant. Scores are not win probabilities.')
     st.caption('Market-wide DISCOVERY ➜ daily liquidity prescreen ➜ 4H/1H/5M alignment ➜ actual option chain ➜ ranked Top 3. No single required ticker.')
     c1,c2,c3=st.columns(3)
     with c1:budget=st.number_input('Maximum 1-contract cost ($)',5,3000,100,5,key='universe_budget')
     with c2:sample=st.selectbox('Listings screened per pass',[120,400,800,1000],index=1,key='scan_breadth')
     with c3:rotation=st.number_input('Universe rotation offset',min_value=0,value=0,step=400,key='scan_offset')
-    st.caption('Includes lower-priced stocks down to $0.50; they must still have listed options and pass liquidity and chart filters. One pass does NOT cover the full universe; rotate through passes to widen discovery. Delayed public data can throttle.')
+    st.caption('Lower-priced contracts are not automatically rejected. Prices still require real vendor quotes, compatible expirations, and a confirmed setup. Limited universe scans and missing Alpaca credentials can return zero results; view notices below.')
     if st.button('🔎 Scan market for Top 3 0DTE + Swings + LEAPS',type='primary',key='request_options'):
         with st.spinner('Discovering listings and ranking liquid underlyings...'):
             all_tickers,listing_notes=listed_symbols()
@@ -97,7 +97,7 @@ with tabs[6]:
         st.caption(f'Listing universe: {listed_count:,} symbols · this pass up to {sample} symbols starting at {rotation:,} · deeper checks: {len(screened)}. Scores are liquidity/fit, NOT predicted profitability. For full coverage, run consecutive passes across the entire universe.')
         for group in CATEGORIES:
             st.markdown(f'### {group} — {len(found[group])} / 3 qualifying contracts')
-            if not found[group]:st.warning('No verifiable contracts met every rule. Increase scan breadth or rotate the universe; no fabricated substitutes.')
+            if not found[group]:st.warning('No contract passed this budget AND the current technical/data rules. This does not mean cheap contracts cannot win. Check market-data notices, coverage and broaden the scan; no fabricated substitutes.')
             for i,rec in enumerate(found[group]):
                 with st.container(border=True):
                     sym=rec['ticker']
@@ -110,6 +110,7 @@ with tabs[6]:
                     st.caption(f"Volume: {rec['volume']:,} · OI: {rec['open_interest']:,} · Spread: {rec['spread_pct']:.1f}% · Last option trade: {rec['last_trade_at']}" if rec.get('volume') is not None and rec.get('open_interest') is not None else f"V1 snapshot · Spread: {rec['spread_pct']:.1f}% · Delta: {rec.get('delta') if rec.get('delta') is not None else 'N/A'} · Quote timestamp: {rec['last_trade_at']}")
                     with st.expander(f'📈 {sym} {"5-minute" if group=="0DTE" else "daily" if group=="Swings" else "weekly"} chart with key levels',expanded=True):
                         show_chart(sym,group)
+                    st.caption(f"Risk tier: {rec.get('liquidity_label', 'UNVERIFIED')} · Estimated round-trip bid/ask friction: ${rec.get('estimated_roundtrip_spread_cost', 0):.2f} per standard 100-share contract (before commissions/slippage).")
                     st.caption(rec.get('quote_warning',''))
                     st.caption('Option premium OHLC and valid premium stops/targets are unavailable from this feed. The chart shows UNDERLYING movement, not the contract price. Confirm quotes before decisions.')
         with st.expander(f'Market-data and screening notices ({len(notes)})'):
