@@ -45,6 +45,10 @@ def scan(store,provider,now):
  rotating=rotating_batch(all_symbols,started,min(24,max(1,int(os.getenv('OPTIONS_UNIVERSE_BATCH','12')))),cadence)
  priority=priority_index_symbols()
  symbols=scan_symbols(rotating,priority)
+ # Explicit user scan requests must check the full configured universe,
+ # not only the scheduled rotating slice. Preserve default rotation otherwise.
+ if pending:
+  symbols=scan_symbols(all_symbols,priority)
  # SPX is attempted on every scan independently of the rotating stock basket.
  # No silent feed fallback: unavailable index-chain quotes are never invented.
  spx_contracts=0
