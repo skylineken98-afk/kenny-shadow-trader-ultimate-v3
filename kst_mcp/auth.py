@@ -1,5 +1,6 @@
 """Resource-bound OAuth validation; never accept a website session as MCP consent."""
 import os
+import json
 import uuid
 from dataclasses import dataclass
 from urllib.parse import urlsplit
@@ -17,6 +18,7 @@ class Config:
     jwks: str
     clients: tuple
     origins: tuple
+    client_redirects: dict
 
     @classmethod
     def load(cls, env=None):
@@ -30,8 +32,23 @@ class Config:
                 or r.scheme != 'https' or not r.hostname or r.username or r.password
                 or r.path != '/mcp' or r.query or r.fragment or not clients):
             raise AccessError(503, 'Connector OAuth configuration is incomplete')
+        try:
+            redirects = json.loads(env.get('KST_MCP_CLIENT_REDIRECTS', '{}'))
+            if not isinstance(redirects, dict): raise ValueError()
+            for client, urls in redirects.items():
+                if client not in clients or not isinstance(urls, list) or not urls:
+                    raise ValueError()
+                for url in urls:
+                    parsed = urlsplit(url)
+                    if (parsed.scheme != 'https' or parsed.netloc not in ('chatgpt.com', 'claude.ai')
+                            or parsed.username or parsed.password or parsed.query or parsed.fragment
+                            or not parsed.path or '*' in url
+                            or (parsed.netloc == 'claude.ai' and parsed.path != '/api/mcp/auth_callback')):
+                        raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise AccessError(503, 'Connector callback configuration is invalid') from None
         return cls(resource, project + '/auth/v1', project + '/auth/v1/.well-known/jwks.json',
-                   clients, tuple(x.strip() for x in env.get('KST_MCP_ALLOWED_ORIGINS', 'https://chatgpt.com').split(',') if x.strip()))
+                   clients, tuple(x.strip() for x in env.get('KST_MCP_ALLOWED_ORIGINS', 'https://chatgpt.com').split(',') if x.strip()), redirects)
 
     def metadata(self):
         return {'resource': self.resource, 'authorization_servers': [self.issuer],
