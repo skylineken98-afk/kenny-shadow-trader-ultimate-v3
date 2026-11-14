@@ -1,0 +1,16 @@
+FROM node:22-alpine AS consent
+WORKDIR /build
+COPY kst_mcp/package.json kst_mcp/package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY kst_mcp/consent.js ./
+RUN npm run build
+
+FROM python:3.12-slim
+WORKDIR /app
+COPY kst_mcp/requirements.txt /app/requirements-mcp.txt
+RUN pip install --no-cache-dir -r requirements-mcp.txt && useradd --create-home connector
+COPY kst_mcp /app/kst_mcp
+COPY kst_chat/__init__.py kst_chat/logic.py /app/kst_chat/
+COPY --from=consent /build/static/consent.bundle.js /app/kst_mcp/static/consent.bundle.js
+USER connector
+CMD ["python", "-m", "kst_mcp.server"]

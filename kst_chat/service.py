@@ -21,6 +21,15 @@ def http_json(url,headers,body=None,timeout=15):
 
 def user_from_token(token,env,http=http_json):
  if not token or len(token)>12000:raise ApiError(401,'Sign in to KST Chat')
+ # OAuth connector tokens must never authorize the website's mutation routes.
+ # This is rejection-only parsing; actual website identity is verified below.
+ if token.count('.')==2:
+  import base64
+  try:
+   part=token.split('.')[1];claims=json.loads(base64.urlsafe_b64decode(part+'='*(-len(part)%4)))
+  except (ValueError,TypeError,UnicodeError):raise ApiError(401,'Invalid session') from None
+  if not isinstance(claims,dict) or claims.get('client_id') or claims.get('kst_mcp_access'):
+   raise ApiError(403,'Connector authorization is read-only; use a website session here')
  config=public_config(env)
  user=http(config['supabase_url']+'/auth/v1/user',{'apikey':config['publishable_key'],'Authorization':'Bearer '+token})
  try:ident=uid(user.get('id'))
