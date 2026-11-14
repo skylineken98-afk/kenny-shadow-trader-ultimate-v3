@@ -1,22 +1,22 @@
 // Bundle with esbuild; browser sessions stay in memory on this dedicated origin.
 import { createClient } from '@supabase/supabase-js';
+import { approvedCallback } from './callbacks.js';
 const message = document.querySelector('#message');
 const login = document.querySelector('#login');
 const consent = document.querySelector('#consent');
 const allow = document.querySelector('#allow');
 const deny = document.querySelector('#deny');
-let supabase, authorizationId, config;
+let supabase, authorizationId, config, clientId;
 function show(text) { message.textContent = text; }
 function safeRedirect(value) {
-  const url = new URL(value);
-  if (url.origin !== 'https://chatgpt.com') throw new Error('Unexpected authorization callback. Contact KST support.');
-  window.location.assign(url.href);
+  window.location.assign(approvedCallback(value, config.client_redirects, clientId));
 }
 async function details() {
   const { data, error } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
   if (error) throw error;
   if (data.redirect_url) { safeRedirect(data.redirect_url); return; }
-  if (!config.client_ids.includes(data.client.id)) throw new Error('This application is not an approved KST ChatGPT client.');
+  if (!config.client_ids.includes(data.client.id) || !config.client_redirects[data.client.id]) throw new Error('This application is not an approved KST assistant client.');
+  clientId = data.client.id;
   document.querySelector('#client').textContent = data.client.name;
   document.querySelector('#scopes').textContent = Array.isArray(data.scopes) ? data.scopes.join(', ') : String(data.scope || data.scopes || '');
   login.hidden = true; consent.hidden = false;
@@ -42,13 +42,13 @@ async function decide(approved) {
       : await supabase.auth.oauth.denyAuthorization(authorizationId, { skipBrowserRedirect: true });
     if (error) throw error;
     safeRedirect(data.redirect_url);
-  } catch (_) { show('Authorization could not finish. Start the connection again from ChatGPT.'); allow.disabled = deny.disabled = false; }
+  } catch (_) { show('Authorization could not finish. Start the connection again from your assistant.'); allow.disabled = deny.disabled = false; }
 }
 allow.addEventListener('click', () => decide(true));
 deny.addEventListener('click', () => decide(false));
 async function initialize() { try {
   authorizationId = new URLSearchParams(location.search).get('authorization_id');
-  if (!authorizationId || authorizationId.length > 256) throw new Error('Start this connection from ChatGPT.');
+  if (!authorizationId || authorizationId.length > 256) throw new Error('Start this connection from ChatGPT or Claude.');
   const response = await fetch('/oauth/config', { cache: 'no-store' });
   if (!response.ok) throw new Error('KST account linking is not enabled yet.');
   config = await response.json();

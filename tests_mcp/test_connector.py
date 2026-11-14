@@ -24,7 +24,7 @@ class ConnectorTests(unittest.TestCase):
         self.store.rows.return_value = []
 
     def test_all_tools_are_read_only(self):
-        self.assertEqual(len(tools()), 7)
+        self.assertEqual(len(tools()), 8)
         for tool in tools():
             self.assertTrue(tool['annotations']['readOnlyHint'])
             self.assertFalse(tool['annotations']['destructiveHint'])
@@ -145,6 +145,10 @@ class TransportTests(unittest.TestCase):
     def test_bad_origin_rejected(self):
         with self.assertRaises(HTTPError) as err: urlopen(Request(self.base + '/health', headers={'Origin': 'https://evil.example'}))
         self.assertEqual(err.exception.code, 403)
+    def test_consent_config_requires_registered_callback_map(self):
+        self.server.enabled = True
+        with self.assertRaises(HTTPError) as err: urlopen(self.base + '/oauth/config')
+        self.assertEqual(err.exception.code, 503)
     def test_auth_challenge(self):
         self.server.enabled = True
         with self.assertRaises(HTTPError) as err: urlopen(Request(self.base + '/mcp', data=b'{}'))

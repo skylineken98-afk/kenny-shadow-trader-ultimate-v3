@@ -10,6 +10,7 @@ from .auth import AccessError
 SIGNALS = 'id,contract,underlying,expiration,option_type,strike,category,created_at,entry_ask,entry_bid,quote_at,feed,score,quality_label,context_label,state,last_bid,last_quote_at,closed_at,outcome_return'
 POSITIONS = 'id,symbol,quantity,entry,stop,target,state,last_bid,quote_at,created_at'
 SPECS = {
+    'get_learning_context': ('Teach market concepts using bounded KST collected evidence. Returns learning questions plus timestamped stored research, not generated trade advice or new scans. Trade review reads only this account.', {'topic': {'type': 'string', 'enum': ['momentum', 'sector_rotation', 'options_risk', 'trade_review']}, 'symbol': {'type': 'string'}}),
     'search_signals': ('Search recorded KST option research by ticker, category and total premium budget. Stale quotes are suppressed; score is not a probability.', {'symbol': {'type': 'string'}, 'category': {'type': 'string', 'enum': ['0DTE', 'Swings', 'LEAPS']}, 'max_cost': {'type': 'number', 'minimum': 1, 'maximum': 100000}}),
     'explain_signal': ('Read the recorded evidence for one signal; never invent rationale or missing targets.', {'signal_id': {'type': 'string', 'format': 'uuid'}}),
     'get_market_overview': ('Read the measured market pulse and sector price/volume estimates, not verified fund flows.', {}),
@@ -25,6 +26,7 @@ def tools():
     for name, (description, properties) in SPECS.items():
         schema = {'type': 'object', 'properties': properties, 'additionalProperties': False}
         if name == 'explain_signal': schema['required'] = ['signal_id']
+        if name == 'get_learning_context': schema['required'] = ['topic']
         result.append({'name': name, 'description': description, 'inputSchema': schema,
                        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'idempotentHint': True, 'openWorldHint': False},
                        'securitySchemes': [{'type': 'oauth2', 'scopes': ['openid', 'email']}]})
@@ -84,6 +86,34 @@ def read_tool(name, args, user, store, now=None):
     symbol = args.get('symbol')
     if symbol is not None and (not isinstance(symbol, str) or not re.fullmatch(r'[A-Z]{1,6}', symbol)):
         raise AccessError(400, 'Use an uppercase ticker')
+    if name == 'get_learning_context':
+        topic = args.get('topic')
+        lessons = {
+            'momentum': ('Separate price momentum from volume evidence; identify invalidation and missing observations.', [('get_market_overview', {}), ('get_news', {})]),
+            'sector_rotation': ('Compare sector price/volume estimates; do not call them verified fund flows.', [('get_market_overview', {})]),
+            'options_risk': ('Explain expiration, liquidity, maximum premium loss and missing Greeks. Historical outcomes are examples, not predictions.', [('search_signals', {'symbol': symbol} if symbol else {}), ('get_signal_outcomes', {'symbol': symbol} if symbol else {})]),
+            'trade_review': ('Review the linked account\'s recorded plan and invalidation; never infer fills, adherence or realized returns from missing records.', [('get_my_records', {})]),
+        }
+        if not isinstance(topic, str) or topic not in lessons:
+            raise AccessError(400, 'Choose a supported learning topic')
+        if symbol and topic != 'options_risk':
+            raise AccessError(400, 'Symbol filtering is supported only for options_risk')
+        objective, sources = lessons[topic]
+        evidence = []
+        for source, source_args in sources:
+            try:
+                result = read_tool(source, source_args, user, store, now)
+            except Exception:
+                result = {'status': 'UNAVAILABLE', 'as_of': now.isoformat(), 'rows': []}
+            evidence.append({'tool': source, 'evidence_type': 'HISTORICAL_RESEARCH_EXAMPLES' if source == 'get_signal_outcomes' else 'STORED_SNAPSHOT', **result})
+        available = any(e.get('status') == 'AVAILABLE' for e in evidence)
+        return {'as_of': now.isoformat(), 'status': 'AVAILABLE' if available else 'NO_MATCHING_DATA',
+                'research_only': True, 'topic': topic, 'learning_objective': objective, 'evidence': evidence,
+                'teaching_guidance': ['Explain the concept before applying the supplied evidence.',
+                                     'Each source retains its own observation timestamp; retrieval time is not quote time.',
+                                     'Explicitly say when KST evidence is missing, stale or incomplete. Do not fill gaps with invented facts.',
+                                     'Explain downside, invalidation and reasons to wait. Do not promise returns or encourage chasing losses.',
+                                     'Any general educational explanation must be distinguished from what KST actually measured.']}
     params = {'limit': 20}
     if symbol: params['underlying' if name in ('search_signals', 'get_signal_outcomes') else 'symbol'] = 'eq.' + symbol
     if name in ('search_signals', 'explain_signal', 'get_signal_outcomes'):
