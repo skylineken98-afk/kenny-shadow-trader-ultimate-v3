@@ -86,8 +86,8 @@ def evaluate(rows):
  return {'state':'RESEARCH_PASS' if passed else 'REJECTED','independent_contract_days':len(rows),'partition_counts':[len(g) for g in groups],'ranking':scores,'model':chosen,'exit_candidate':chosen_exit,'exit_results':exit_scores,'exit_pass':all(v['baseline'] is not None and v['challenger'] is not None and v['challenger']>v['baseline']+.02 for v in exit_scores.values()),'limitations':'Retrospective selection bias, correlated symbols, finite polling, missing features and small samples remain. One-cent premium slippage each way plus configured fees. No production promotion or performance guarantee. Validate prospectively before adoption.'}
 
 def cycle(store,now):
- recent=store.rows('kst_option_signals',feed='eq.opra',order='created_at.desc',limit=1000)
- captured={r['id']:r for r in store.rows('kst_research_samples',order='created_at.desc',limit=2000)}
+ recent=store.rows('kst_option_signals',feed='eq.opra',order='created_at.desc',limit=250)
+ captured={r['id']:r for r in store.rows('kst_research_samples',order='created_at.desc',limit=500)}
  added=0
  for s in recent:
   if s['id'] in captured:continue
@@ -111,3 +111,4 @@ def cycle(store,now):
  report=evaluate(rows);digest=hashlib.sha256('|'.join(sorted(r['id'] for r in rows)).encode()).hexdigest();ident=str(uuid.uuid5(uuid.NAMESPACE_URL,'research-r5:'+digest))
  store.insert('kst_research_reports',{'id':ident,'state':report['state'],'report':report},ignore=True)
  return report
+
