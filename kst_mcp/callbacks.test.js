@@ -12,3 +12,8 @@ test('reject offsite, lookalike, other path, credentials and fragments', () => {
 test('missing registered callback denies navigation', () => {
   assert.throws(() => approvedCallback(redirects.claude[0], {}, 'claude'));
 });
+
+test('early redirects require a verified client, never the union of callbacks', () => {
+  for (const client of [null, undefined, '', 'unknown', 'toString'])
+    assert.throws(() => approvedCallback(redirects.claude[0] + '?code=x&state=y', redirects, client));
+});

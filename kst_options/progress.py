@@ -12,7 +12,7 @@ def regime(signal):
 
 def remember(store):
  # Source row IDs make repeated polling idempotent. No reconstructed history.
- signals=store.rows('ultimate_signals',order='created_at.desc',limit=500)
+ signals=store.rows('ultimate_signals',order='created_at.desc',limit=100)
  if signals:store.insert('kst_market_memory',[{'id':s['id'],'created_at':s['created_at'],'symbol':s['symbol'],'regime':regime(s),'observation':{'status':s['status'],'side':s.get('side'),'frames':(s.get('details') or {}).get('frames',{}),'source':s.get('source')}} for s in signals],ignore=True)
 
 def cycle(store,provider,now,allow_open=False):
@@ -64,3 +64,4 @@ def cycle(store,provider,now,allow_open=False):
    result=store.call('POST','rpc/kst_agent_open',data={'p_agent':agent,'p_signal':c['id'],'p_ask':q[1],'p_bid':q[0],'p_quote':stamp(q[2])})
    if result.get('action')=='RESEARCH_OPEN' or result.get('reason') in ('One open research position per agent',):break
   store.insert('kst_agent_decisions',{'agent':agent,'action':result['action'],'reason':result['reason'],'signal_id':chosen['id'] if chosen else None,'model_version':chosen['model_version'] if chosen else 'baseline-v1','regime':chosen['context_label'] if chosen else 'NO_SETUP'})
+

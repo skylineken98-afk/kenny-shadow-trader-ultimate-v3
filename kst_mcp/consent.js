@@ -14,9 +14,9 @@ function safeRedirect(value) {
 async function details() {
   const { data, error } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
   if (error) throw error;
-  if (data.redirect_url) { safeRedirect(data.redirect_url); return; }
-  if (!config.client_ids.includes(data.client.id) || !config.client_redirects[data.client.id]) throw new Error('This application is not an approved KST assistant client.');
+  if (!data.client || !config.client_ids.includes(data.client.id) || !config.client_redirects[data.client.id]) throw new Error('This application is not an approved KST assistant client.');
   clientId = data.client.id;
+  if (data.redirect_url) { safeRedirect(data.redirect_url); return; }
   document.querySelector('#client').textContent = data.client.name;
   document.querySelector('#scopes').textContent = Array.isArray(data.scopes) ? data.scopes.join(', ') : String(data.scope || data.scopes || '');
   login.hidden = true; consent.hidden = false;
