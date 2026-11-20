@@ -165,6 +165,10 @@ with tabs[10]:
 
 
 # Independent upgrade dashboard panels. These never trigger broker orders.
+from core.day_trader.panel import render as render_day_trader_research
+
+render_day_trader_research()
+
 with st.expander('Research agent evaluations (read-only)', expanded=False):
     from core.agents import PROFILES, evaluate
     pick=st.selectbox('Agent profile',list(PROFILES),key='research_profile')
